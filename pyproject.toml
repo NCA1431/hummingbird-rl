@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hummingbird-rl"
+version = "0.1.0"
+description = "Reinforcement learning for a simulated hummingbird"
+requires-python = ">=3.11,<3.14"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "torch>=2.7",            # 2.7+ is needed for the RTX 50 series (CUDA 12.8)
+    "gymnasium>=1.0",
+    "stable-baselines3>=2.4",
+    "wandb>=0.22.3",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+    "tensorboard>=2.15",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.17.1",
+]
+
+# PyTorch with CUDA from the official PyTorch index (Windows and Linux).
+# If uv finds no matching torch, replace every "cu130" below by "cu128".
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.setuptools.packages.find]
+include = ["hummingbird_rl*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+
+[tool.ruff]
+line-length = 120          # the code is written with lines up to about 120 characters
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]   # pycodestyle errors and warnings, pyflakes, import order
+
+[tool.ruff.lint.isort]
+known-first-party = ["hummingbird_rl"]
