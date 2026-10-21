@@ -1,0 +1,17 @@
+# Overnight pilots (Tuesday 20 October): does each algorithm learn each task, and how fast?
+# One seed each. Devices from scripts/benchmark_device.py on the Legion:
+#   SAC  cpu 89 steps/s, cuda 67  -> cpu
+#   TD3  cpu 141 steps/s, cuda 193 -> cuda
+# The longest jobs come first (SAC, about 3-4 h each), so the whole batch ends in about 4-5 h.
+common: --wandb --group pilots
+jobs:
+  - --algo sac --task goto --steps 1e6 --device cpu
+  - --algo sac --task hover --steps 1e6 --device cpu
+  - --algo sac --task obstacles --steps 1e6 --device cpu
+  - --algo td3 --task goto --steps 1e6 --device cuda
+  - --algo td3 --task hover --steps 1e6 --device cuda
+  - --algo ppo --task navigation --steps 5e6
+  - --algo ppo --task obstacles --steps 3e6
+  - --algo ppo --task goto --steps 2e6
+  - --algo ppo --task hover --regime randomised --steps 2e6
+  - --algo ppo --task hover --steps 1e6

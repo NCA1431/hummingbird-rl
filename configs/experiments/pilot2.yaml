@@ -1,0 +1,19 @@
+# Pilot 2 (Wednesday 21 October): the two problems of the first pilots, one seed each, PPO only.
+#
+# 1. Navigation from scratch failed (2% success, 88% of episodes ended in a collision).
+#    Two suspects, tested separately and together, plus a preview of the transfer experiment:
+#      - the discount: gamma = 0.99 looks only ~1.7 s ahead in a 15 s task -> try 0.995 (~3.3 s);
+#      - the failure penalty: -10 is cheap next to the progress reward (+1 per cm) -> try -50.
+#    The first pilot (gamma 0.99, penalty -10) is the reference.
+# 2. PPO on Hover drifted down after converging (100% -> 80%) -> try a learning rate decreasing to 0.
+# Plus one check that a larger failure penalty does not hurt Obstacles, which already works.
+#
+# About 75-85 min per 3M-step run with 6 jobs in parallel.
+common: --wandb --group pilot2
+jobs:
+  - --algo ppo --task navigation --steps 3e6 --set gamma=0.995 --env failure_reward=-50 --name ppo_navigation_g995_f50_s0
+  - --algo ppo --task navigation --steps 3e6 --set gamma=0.995 --name ppo_navigation_g995_s0
+  - --algo ppo --task navigation --steps 3e6 --env failure_reward=-50 --name ppo_navigation_f50_s0
+  - --algo ppo --task navigation --steps 3e6 --set gamma=0.995 --env failure_reward=-50 --init-from ppo_obstacles_normal_s0 --name ppo_navigation_from_obstacles_s0
+  - --algo ppo --task obstacles --steps 2e6 --env failure_reward=-50 --name ppo_obstacles_f50_s0
+  - --algo ppo --task hover --steps 1e6 --set anneal_lr=true --name ppo_hover_anneal_s0

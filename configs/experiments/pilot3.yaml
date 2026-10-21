@@ -1,0 +1,19 @@
+# Pilot 3 (Wednesday 21 October, afternoon): Navigation, the only task nobody solves yet.
+#
+# Pilot 2 ruled out the two easy suspects: neither gamma = 0.995 nor a -50 failure penalty
+# helped (0-4% success, still 74-88% collisions); starting from the Obstacles model did
+# (14%). So we now ask:
+#   - is it PPO? SAC was far better than PPO on Obstacles (98% vs 84%): short SAC and TD3
+#     runs, to compare with PPO at the same number of steps;
+#   - is it the learning-rate drift? PPO now anneals its learning rate by default;
+#   - is the course too cluttered? Our scenes have ~8 spheres and the straight legs pass
+#     within a few millimetres of them; try 3-6 spheres, from scratch and from Obstacles.
+# About 70 min for the PPO runs, 1 h for SAC, 40 min for TD3, with 6 jobs at once.
+common: --wandb --group pilot3
+jobs:
+  - --algo sac --task navigation --steps 2e5 --device cpu --val-every 25000 --name sac_navigation_s0
+  - --algo td3 --task navigation --steps 2e5 --device cuda --val-every 25000 --name td3_navigation_s0
+  - --algo ppo --task navigation --steps 3e6 --name ppo_navigation_anneal_s0
+  - --algo ppo --task navigation --steps 3e6 --init-from ppo_obstacles_normal_s0 --name ppo_navigation_from_obstacles_anneal_s0
+  - --algo ppo --task navigation --steps 3e6 --env n_obstacles=[3,6] --name ppo_navigation_sparse_s0
+  - --algo ppo --task navigation --steps 3e6 --env n_obstacles=[3,6] --init-from ppo_obstacles_normal_s0 --name ppo_navigation_sparse_from_obstacles_s0
