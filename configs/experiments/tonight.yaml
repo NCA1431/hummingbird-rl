@@ -1,0 +1,86 @@
+# Tonight's queue (Wednesday 21 October, launched at 17:45): the real experiments, 3 seeds each.
+#
+#   E1 benchmark   PPO and SAC on the four tasks, TD3 on hover and go-to-point, normal conditions
+#   E2 robustness  PPO trained under randomised conditions, same budget as E1 (evaluated on the grid later)
+#   E4 ablations   what each part does: PPO clipping, advantage normalisation, GAE lambda, our hover
+#                  initialisation; SAC's learned temperature; the failure penalty on Navigation
+#   E5 transfer    Navigation starting from the Obstacles model of the same seed (paired seeds),
+#                  compared with the E1 Navigation runs from scratch (same budget)
+#
+# Budgets from the pilots (about 3x the steps needed to reach 90% validation success), and
+# durations from their speeds with 7 jobs at once: PPO ~700 steps/s, SAC ~43, TD3 ~86.
+# About 105 job-hours in total: with 7 jobs at once, done around 9:00 on Thursday.
+# Jobs start in this order. PPO Obstacles goes first, so that its models exist long before the
+# transfer runs at the end of the list need them; then the longest jobs, so that the short
+# ones fill the gaps at the end.
+# PPO uses the annealed learning rate (configs/algos/ppo.yaml).
+common: --wandb
+jobs:
+  # E1 PPO Obstacles first: the transfer runs (E5, last block) start from these models
+  - --algo ppo --task obstacles --steps 3e6 --seed 1 --group e1_benchmark
+  - --algo ppo --task obstacles --steps 3e6 --seed 2 --group e1_benchmark
+  - --algo ppo --task obstacles --steps 3e6 --seed 3 --group e1_benchmark
+  # E1 SAC on the two obstacle tasks: the longest jobs (~6.5 h each), started early
+  - --algo sac --task navigation --steps 1e6 --device cpu --seed 1 --group e1_benchmark
+  - --algo sac --task navigation --steps 1e6 --device cpu --seed 2 --group e1_benchmark
+  - --algo sac --task navigation --steps 1e6 --device cpu --seed 3 --group e1_benchmark
+  - --algo sac --task obstacles --steps 1e6 --device cpu --seed 1 --group e1_benchmark
+  - --algo sac --task obstacles --steps 1e6 --device cpu --seed 2 --group e1_benchmark
+  - --algo sac --task obstacles --steps 1e6 --device cpu --seed 3 --group e1_benchmark
+  # E1 SAC on hover and go-to-point (~3 h each); E4 SAC with a fixed temperature (alpha = 0.2)
+  - --algo sac --task hover --steps 5e5 --device cpu --seed 1 --group e1_benchmark
+  - --algo sac --task hover --steps 5e5 --device cpu --seed 2 --group e1_benchmark
+  - --algo sac --task hover --steps 5e5 --device cpu --seed 3 --group e1_benchmark
+  - --algo sac --task goto --steps 5e5 --device cpu --seed 1 --group e1_benchmark
+  - --algo sac --task goto --steps 5e5 --device cpu --seed 2 --group e1_benchmark
+  - --algo sac --task goto --steps 5e5 --device cpu --seed 3 --group e1_benchmark
+  - --algo sac --task hover --steps 5e5 --device cpu --set ent_coef=0.2 --seed 1 --name sac_hover_fixedalpha_s1 --group e4_ablations
+  - --algo sac --task hover --steps 5e5 --device cpu --set ent_coef=0.2 --seed 2 --name sac_hover_fixedalpha_s2 --group e4_ablations
+  - --algo sac --task hover --steps 5e5 --device cpu --set ent_coef=0.2 --seed 3 --name sac_hover_fixedalpha_s3 --group e4_ablations
+  # E1 TD3 on the GPU (~1.5 h each)
+  - --algo td3 --task hover --steps 5e5 --device cuda --seed 1 --group e1_benchmark
+  - --algo td3 --task hover --steps 5e5 --device cuda --seed 2 --group e1_benchmark
+  - --algo td3 --task hover --steps 5e5 --device cuda --seed 3 --group e1_benchmark
+  - --algo td3 --task goto --steps 5e5 --device cuda --seed 1 --group e1_benchmark
+  - --algo td3 --task goto --steps 5e5 --device cuda --seed 2 --group e1_benchmark
+  - --algo td3 --task goto --steps 5e5 --device cuda --seed 3 --group e1_benchmark
+  # E1 PPO Navigation (3-6 spheres); E4 the same with a -50 failure penalty (RL collides far more than the PID here)
+  - --algo ppo --task navigation --steps 4e6 --seed 1 --group e1_benchmark
+  - --algo ppo --task navigation --steps 4e6 --seed 2 --group e1_benchmark
+  - --algo ppo --task navigation --steps 4e6 --seed 3 --group e1_benchmark
+  - --algo ppo --task navigation --steps 4e6 --env failure_reward=-50 --seed 1 --name ppo_navigation_f50_s1 --group e4_ablations
+  - --algo ppo --task navigation --steps 4e6 --env failure_reward=-50 --seed 2 --name ppo_navigation_f50_s2 --group e4_ablations
+  - --algo ppo --task navigation --steps 4e6 --env failure_reward=-50 --seed 3 --name ppo_navigation_f50_s3 --group e4_ablations
+  # E1 PPO go-to-point; E2 the same trained under randomised conditions (equal budget)
+  - --algo ppo --task goto --steps 1.5e6 --seed 1 --group e1_benchmark
+  - --algo ppo --task goto --steps 1.5e6 --seed 2 --group e1_benchmark
+  - --algo ppo --task goto --steps 1.5e6 --seed 3 --group e1_benchmark
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --seed 1 --group e2_robustness
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --seed 2 --group e2_robustness
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --seed 3 --group e2_robustness
+  # E1 PPO hover; E2 randomised; E4 PPO ablations on hover (no clipping, no advantage normalisation, GAE lambda 0 and 1, no hover initialisation)
+  - --algo ppo --task hover --steps 1e6 --seed 1 --group e1_benchmark
+  - --algo ppo --task hover --steps 1e6 --seed 2 --group e1_benchmark
+  - --algo ppo --task hover --steps 1e6 --seed 3 --group e1_benchmark
+  - --algo ppo --task hover --regime randomised --steps 1e6 --seed 1 --group e2_robustness
+  - --algo ppo --task hover --regime randomised --steps 1e6 --seed 2 --group e2_robustness
+  - --algo ppo --task hover --regime randomised --steps 1e6 --seed 3 --group e2_robustness
+  - --algo ppo --task hover --steps 1e6 --set clip_range=1000 --seed 1 --name ppo_hover_noclip_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set clip_range=1000 --seed 2 --name ppo_hover_noclip_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set clip_range=1000 --seed 3 --name ppo_hover_noclip_s3 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_advantage=false --seed 1 --name ppo_hover_noadvnorm_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_advantage=false --seed 2 --name ppo_hover_noadvnorm_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_advantage=false --seed 3 --name ppo_hover_noadvnorm_s3 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=0.0 --seed 1 --name ppo_hover_lambda0_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=0.0 --seed 2 --name ppo_hover_lambda0_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=0.0 --seed 3 --name ppo_hover_lambda0_s3 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=1.0 --seed 1 --name ppo_hover_lambda1_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=1.0 --seed 2 --name ppo_hover_lambda1_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set gae_lambda=1.0 --seed 3 --name ppo_hover_lambda1_s3 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --no-hover-init --seed 1 --name ppo_hover_nohoverinit_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --no-hover-init --seed 2 --name ppo_hover_nohoverinit_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --no-hover-init --seed 3 --name ppo_hover_nohoverinit_s3 --group e4_ablations
+  # E5 transfer, last: by the time these start, the PPO Obstacles models of the first block are long finished
+  - --algo ppo --task navigation --steps 4e6 --init-from ppo_obstacles_normal_s1 --seed 1 --name ppo_navigation_from_obstacles_s1 --group e5_transfer
+  - --algo ppo --task navigation --steps 4e6 --init-from ppo_obstacles_normal_s2 --seed 2 --name ppo_navigation_from_obstacles_s2 --group e5_transfer
+  - --algo ppo --task navigation --steps 4e6 --init-from ppo_obstacles_normal_s3 --seed 3 --name ppo_navigation_from_obstacles_s3 --group e5_transfer

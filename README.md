@@ -2,8 +2,8 @@
 
 Reinforcement learning for a simulated hummingbird: PPO, SAC and TD3 against PID and LQR
 on hover, go-to-point, obstacle and navigation tasks. Work in progress: the simulator, the
-environment, the PID baseline and the training pipeline are done; LQR, evaluation and the web
-viewer come next.
+environment, the PID and LQR baselines, the training pipeline and the evaluation are done; the
+web viewer comes next.
 
 ## Setup (Windows, PowerShell, with uv)
 
@@ -11,7 +11,7 @@ viewer come next.
 cd C:\Users\nca18\projects\hummingbird-rl
 uv sync                 # creates .venv with Python 3.12, installs PyTorch (CUDA) and everything else, writes uv.lock
 uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-uv run pytest           # 104 passed (about 30 s)
+uv run pytest           # 126 passed
 ```
 
 `uv.lock` pins every version: commit it.
@@ -24,12 +24,12 @@ hummingbird_rl/
   world/    scenes (targets and obstacles), collisions, random scene generation
   tasks/    hover & recover, go-to-point, obstacles, navigation: rewards and success rules
   envs/     the Gymnasium environment, the observation, the disturbance regimes
-  controllers/  PID + potential field (classical baseline), thrust/torque -> action mixer
+  controllers/  classical baselines: PID and LQR, with a potential field for obstacles; action mixer
   training/     train.py (PPO, SAC, TD3 with Stable-Baselines3), logging callbacks
-  evaluation/   running episodes on fixed seeds, summaries
+  evaluation/   episodes on fixed seeds; suites (test, robustness grid, mass, failure, behaviour); intervals
 configs/algos/      hyperparameters of each algorithm
 configs/experiments/  lists of runs for scripts/launch.py
-scripts/    launch.py, pid_baseline.py, benchmark_device.py
+scripts/    launch.py, evaluate.py, runs_summary.py, pid_baseline.py, benchmark_device.py
 tests/      one test file per module
 data/vanderbilt/  hummingbird wing kinematics (Song et al. 2016, Dryad doi:10.5061/dryad.8ch1b)
 ```
@@ -42,7 +42,7 @@ uv run python scripts/launch.py configs/experiments/pilots.yaml --parallel 7    
 uv run python scripts/pid_baseline.py                                           # the PID's numbers
 ```
 
-Runs are saved in `results/runs/<algo>_<task>_<regime>_s<seed>/`.
+Runs are saved in `results/runs/<algo>_<task>_<regime>_s<seed>_<date>_<time>/`. 
 
 Quick check that everything is wired up:
 

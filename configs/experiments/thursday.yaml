@@ -1,0 +1,16 @@
+# Thursday, once tonight's PPO hover and go-to-point models are finished (E1, seeds 1-3):
+#
+#   E3 fine-tuning  the normal-conditions model of hover / go-to-point, trained a little longer
+#                   (+30% of its budget) under randomised conditions, compared with E2 (randomised
+#                   from scratch); also checks how much it forgets of normal conditions
+#
+# Not in tonight's queue: those models are among the last to finish, and starting from a
+# half-trained model would make the comparison meaningless.
+common: --wandb
+jobs:
+  - --algo ppo --task hover --regime randomised --steps 3e5 --init-from ppo_hover_normal_s1 --seed 1 --name ppo_hover_finetuned_s1 --group e3_finetuning
+  - --algo ppo --task hover --regime randomised --steps 3e5 --init-from ppo_hover_normal_s2 --seed 2 --name ppo_hover_finetuned_s2 --group e3_finetuning
+  - --algo ppo --task hover --regime randomised --steps 3e5 --init-from ppo_hover_normal_s3 --seed 3 --name ppo_hover_finetuned_s3 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 4.5e5 --init-from ppo_goto_normal_s1 --seed 1 --name ppo_goto_finetuned_s1 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 4.5e5 --init-from ppo_goto_normal_s2 --seed 2 --name ppo_goto_finetuned_s2 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 4.5e5 --init-from ppo_goto_normal_s3 --seed 3 --name ppo_goto_finetuned_s3 --group e3_finetuning
