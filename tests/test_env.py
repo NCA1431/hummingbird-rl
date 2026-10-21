@@ -114,3 +114,10 @@ def test_failure_reward_can_be_changed():
         if term:
             break
     assert info["reason"] == "crash" and r == -50.0
+
+
+def test_number_of_obstacles_reaches_the_sampler():
+    env = HummingbirdEnv("navigation", regime="calm", n_obstacles=(3, 3))
+    for seed in range(3):
+        env.reset(seed=seed)
+        assert len(env.scene.obstacles) == 3

@@ -83,8 +83,8 @@ def sample_goto(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
     raise RuntimeError("could not sample a go-to-point scene")
 
 
-def sample_obstacles(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
-    """One goal 50-80 cm away with 3-6 spheres placed around the straight path."""
+def sample_obstacles(rng: np.random.Generator, r_bird: float = 0.02, n_obstacles: tuple[int, int] = (3, 6)) -> Scene:
+    """One goal 50-80 cm away with 3-6 spheres (by default) placed around the straight path."""
     for _ in range(MAX_TRIES):
         dist = rng.uniform(0.50, 0.80)
         altitude = rng.uniform(0.30, 0.80)
@@ -94,7 +94,7 @@ def sample_obstacles(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
         goal = START + np.array([horizontal * np.cos(bearing), dy, horizontal * np.sin(bearing)])
 
         obstacles = []
-        for _ in range(rng.integers(3, 7)):
+        for _ in range(rng.integers(n_obstacles[0], n_obstacles[1] + 1)):
             for _ in range(50):
                 radius = rng.uniform(0.04, 0.10)
                 center = START + rng.uniform(0.2, 0.8) * (goal - START) + _point_in_ball(rng, 0.12)
@@ -108,8 +108,14 @@ def sample_obstacles(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
     raise RuntimeError("could not sample an obstacles scene")
 
 
-def sample_navigation(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
-    """Three waypoints in a fixed order, with 6-10 spheres scattered along the course."""
+def sample_navigation(rng: np.random.Generator, r_bird: float = 0.02, n_obstacles: tuple[int, int] = (3, 6)) -> Scene:
+    """Three waypoints in a fixed order, with 3-6 spheres (by default) scattered along the course.
+
+    We first used 6-10 spheres. In the pilots of 21 October nothing could fly those courses
+    (PPO 2-18%, PID 12%, LQR 2%: about 8 spheres per course, and the straight legs passed a
+    median 4 mm from one), so the comparison between methods said nothing. With 3-6 spheres
+    the task stays the hardest of the four (PPO 22-32%, PID 42%) but leaves room to rank them.
+    """
     for _ in range(MAX_TRIES):
         waypoints, current = [], START.copy()
         for _ in range(3):
@@ -131,7 +137,7 @@ def sample_navigation(rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
 
         course = [START] + waypoints
         obstacles = []
-        for _ in range(rng.integers(6, 11)):
+        for _ in range(rng.integers(n_obstacles[0], n_obstacles[1] + 1)):
             for _ in range(50):
                 leg = rng.integers(0, 3)
                 a, b = course[leg], course[leg + 1]
@@ -154,5 +160,6 @@ SAMPLERS: dict[str, Callable[[np.random.Generator, float], Scene]] = {
 }
 
 
-def sample_scene(task: str, rng: np.random.Generator, r_bird: float = 0.02) -> Scene:
-    return SAMPLERS[task](rng, r_bird)
+def sample_scene(task: str, rng: np.random.Generator, r_bird: float = 0.02, **options) -> Scene:
+    """`options` go to the task's sampler, e.g. n_obstacles=(3, 6) for the tasks with obstacles."""
+    return SAMPLERS[task](rng, r_bird, **options)

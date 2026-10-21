@@ -95,7 +95,7 @@ def test_navigation_scenes():
         for a, b in zip(course[:-1], course[1:]):
             assert 0.25 - 1e-9 <= np.linalg.norm(b - a) <= 0.50 + 1e-9
         assert all(np.hypot(w[0], w[2]) <= 1.0 for w in scene.targets)
-        assert 6 <= len(scene.obstacles) <= 10
+        assert 3 <= len(scene.obstacles) <= 6
         assert not any(collides(p, scene.obstacles, 0.0) for p in course)
 
 
@@ -103,3 +103,10 @@ def test_sampling_is_reproducible():
     a = sample_scene("navigation", np.random.default_rng(7)).to_dict()
     b = sample_scene("navigation", np.random.default_rng(7)).to_dict()
     assert a == b
+
+
+def test_number_of_obstacles_can_be_changed():
+    rng = np.random.default_rng(4)
+    for task in ("obstacles", "navigation"):
+        counts = {len(sample_scene(task, rng, n_obstacles=(2, 3)).obstacles) for _ in range(10)}
+        assert counts <= {2, 3}

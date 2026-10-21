@@ -44,14 +44,15 @@ class HummingbirdEnv(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, task: str = "hover", regime: str | Regime = "normal", params: BirdParams | None = None,
-                 failure_reward: float | None = None):
-        """`failure_reward` replaces the task's default penalty for a failure (-10); used to test
-        whether failures should cost more in the long tasks."""
+                 failure_reward: float | None = None, n_obstacles: tuple[int, int] | None = None):
+        """Two options for experiments: `failure_reward` replaces the task's penalty for a failure
+        (-10), and `n_obstacles` (min, max) the number of spheres in the tasks with obstacles."""
         if task not in TASKS:
             raise ValueError(f"unknown task {task!r}, expected one of {sorted(TASKS)}")
         self.p = params or DEFAULT_PARAMS
         task_kwargs = {} if failure_reward is None else {"failure_reward": failure_reward}
         self.task = TASKS[task](self.p, **task_kwargs)
+        self.scene_options = {} if n_obstacles is None else {"n_obstacles": tuple(n_obstacles)}
         self.regime = regime
         self.dyn = BirdDynamics(self.p)
         self.hover = hover_action(self.p)
@@ -68,7 +69,8 @@ class HummingbirdEnv(gym.Env):
         super().reset(seed=seed)
         rng = self.np_random
         options = options or {}
-        self.scene: Scene = options.get("scene") or sample_scene(self.task.name, rng, self.p.r_bird)
+        self.scene: Scene = options.get("scene") or sample_scene(self.task.name, rng, self.p.r_bird,
+                                                                 **self.scene_options)
         self.conditions: Conditions = options.get("conditions") or sample_conditions(self.regime, rng, self.p)
         self.state: BirdState = (options["state"].copy() if "state" in options
                                  else self.task.initial_state(self.scene, rng))
