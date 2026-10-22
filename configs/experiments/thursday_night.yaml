@@ -1,0 +1,51 @@
+# Thursday night's queue: three questions left open by the first results.
+#
+#   E2 for SAC and TD3   trained under randomised conditions, same budget as their E1 runs. Trained in
+#                        normal conditions they are the most fragile agents (robust area 0.03-0.32);
+#                        randomisation fixed PPO (0.39 -> 0.79 hover, 0.36 -> 0.96 go-to-point). Does it
+#                        fix them too, i.e. is the fragility about the algorithm or about the data?
+#   E3, longer           fine-tuning with +100% of the budget instead of +30%: as many randomised steps
+#                        as E2, plus the normal pre-training. The +30% curves were still rising; does
+#                        fine-tuning catch up with training from scratch?
+#   E1/E5, seeds 4-5     PPO Obstacles, Navigation from scratch and Navigation from Obstacles, so that
+#                        the transfer result (30% vs 16%, every seed improved) rests on 5 paired seeds.
+#
+# Durations with 7 jobs at once (from Wednesday's queue): SAC 0.5M ~205 min, TD3 0.5M ~105 min,
+# PPO Navigation 4M ~100 min, PPO Obstacles 3M ~68 min, PPO hover/go-to-point 1-1.5M ~25-30 min.
+# About 7 hours in total.
+#
+# Order matters for the transfer runs. --init-from takes the best_model.zip of the newest run of
+# that name, and that file already exists while the run is still training. The two Obstacles runs
+# start first and free the first two lanes (~68 min); the transfer runs are placed after the 9th
+# job, so they can only start once a third lane is free, i.e. after both Obstacles runs have ended.
+common: --wandb
+jobs:
+  # E1 PPO Obstacles, seeds 4-5 (the transfer runs below start from these)
+  - --algo ppo --task obstacles --steps 3e6 --seed 4 --group e1_benchmark
+  - --algo ppo --task obstacles --steps 3e6 --seed 5 --group e1_benchmark
+  # E2 SAC, randomised (SAC on the CPU, as in E1)
+  - --algo sac --task hover --regime randomised --steps 5e5 --device cpu --seed 1 --group e2_robustness
+  - --algo sac --task hover --regime randomised --steps 5e5 --device cpu --seed 2 --group e2_robustness
+  - --algo sac --task hover --regime randomised --steps 5e5 --device cpu --seed 3 --group e2_robustness
+  - --algo sac --task goto --regime randomised --steps 5e5 --device cpu --seed 1 --group e2_robustness
+  - --algo sac --task goto --regime randomised --steps 5e5 --device cpu --seed 2 --group e2_robustness
+  - --algo sac --task goto --regime randomised --steps 5e5 --device cpu --seed 3 --group e2_robustness
+  # E1 PPO Navigation from scratch, seeds 4-5, and E5 transfer from the Obstacles models above (paired seeds)
+  - --algo ppo --task navigation --steps 4e6 --seed 4 --group e1_benchmark
+  - --algo ppo --task navigation --steps 4e6 --init-from ppo_obstacles_normal_s4 --seed 4 --name ppo_navigation_from_obstacles_s4 --group e5_transfer
+  - --algo ppo --task navigation --steps 4e6 --seed 5 --group e1_benchmark
+  - --algo ppo --task navigation --steps 4e6 --init-from ppo_obstacles_normal_s5 --seed 5 --name ppo_navigation_from_obstacles_s5 --group e5_transfer
+  # E2 TD3, randomised (TD3 on the GPU, as in E1)
+  - --algo td3 --task hover --regime randomised --steps 5e5 --device cuda --seed 1 --group e2_robustness
+  - --algo td3 --task hover --regime randomised --steps 5e5 --device cuda --seed 2 --group e2_robustness
+  - --algo td3 --task hover --regime randomised --steps 5e5 --device cuda --seed 3 --group e2_robustness
+  - --algo td3 --task goto --regime randomised --steps 5e5 --device cuda --seed 1 --group e2_robustness
+  - --algo td3 --task goto --regime randomised --steps 5e5 --device cuda --seed 2 --group e2_robustness
+  - --algo td3 --task goto --regime randomised --steps 5e5 --device cuda --seed 3 --group e2_robustness
+  # E3 longer fine-tuning: +100% of the E1 budget (hover 1M, go-to-point 1.5M), short jobs to fill the end
+  - --algo ppo --task hover --regime randomised --steps 1e6 --init-from ppo_hover_normal_s1 --seed 1 --name ppo_hover_finetuned_long_s1 --group e3_finetuning
+  - --algo ppo --task hover --regime randomised --steps 1e6 --init-from ppo_hover_normal_s2 --seed 2 --name ppo_hover_finetuned_long_s2 --group e3_finetuning
+  - --algo ppo --task hover --regime randomised --steps 1e6 --init-from ppo_hover_normal_s3 --seed 3 --name ppo_hover_finetuned_long_s3 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --init-from ppo_goto_normal_s1 --seed 1 --name ppo_goto_finetuned_long_s1 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --init-from ppo_goto_normal_s2 --seed 2 --name ppo_goto_finetuned_long_s2 --group e3_finetuning
+  - --algo ppo --task goto --regime randomised --steps 1.5e6 --init-from ppo_goto_normal_s3 --seed 3 --name ppo_goto_finetuned_long_s3 --group e3_finetuning

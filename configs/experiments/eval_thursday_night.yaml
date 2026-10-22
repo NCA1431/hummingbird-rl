@@ -1,0 +1,47 @@
+# Evaluation of the 24 runs of thursday_night.yaml (30 jobs), same tests as eval_thursday.yaml.
+#
+#     uv run python scripts/launch.py configs/experiments/eval_thursday_night.yaml --parallel 7
+#
+# Launch only once thursday_night.yaml has finished: an evaluation reads model.zip, which a run
+# writes at its very end. About 25 minutes with 7 at once. Logged to W&B in the group "eval";
+# results in results/eval/<run>/<task>/, then `uv run python scripts/eval_summary.py`.
+#
+# SAC and TD3 hover are also evaluated with their best-validation model (`--which best`, saved
+# as <run>_best), as for the normal-condition runs: both degraded late in training there.
+script: scripts/evaluate.py
+common: --wandb
+jobs:
+  # E2 for SAC and TD3 (randomised training): hover with the full set of tests
+  - --policy sac_hover_randomised_s1 --suites test grid mass failure
+  - --policy sac_hover_randomised_s2 --suites test grid mass failure
+  - --policy sac_hover_randomised_s3 --suites test grid mass failure
+  - --policy td3_hover_randomised_s1 --suites test grid mass failure
+  - --policy td3_hover_randomised_s2 --suites test grid mass failure
+  - --policy td3_hover_randomised_s3 --suites test grid mass failure
+  - --policy sac_hover_randomised_s1 --which best --suites test grid mass failure
+  - --policy sac_hover_randomised_s2 --which best --suites test grid mass failure
+  - --policy sac_hover_randomised_s3 --which best --suites test grid mass failure
+  - --policy td3_hover_randomised_s1 --which best --suites test grid mass failure
+  - --policy td3_hover_randomised_s2 --which best --suites test grid mass failure
+  - --policy td3_hover_randomised_s3 --which best --suites test grid mass failure
+  # E3 with +100% of the budget: hover
+  - --policy ppo_hover_finetuned_long_s1 --suites test grid mass failure
+  - --policy ppo_hover_finetuned_long_s2 --suites test grid mass failure
+  - --policy ppo_hover_finetuned_long_s3 --suites test grid mass failure
+  # Go-to-point: same groups; the behaviour test (turn or back up) replaces the failure test
+  - --policy sac_goto_randomised_s1 --suites test grid mass behaviour
+  - --policy sac_goto_randomised_s2 --suites test grid mass behaviour
+  - --policy sac_goto_randomised_s3 --suites test grid mass behaviour
+  - --policy td3_goto_randomised_s1 --suites test grid mass behaviour
+  - --policy td3_goto_randomised_s2 --suites test grid mass behaviour
+  - --policy td3_goto_randomised_s3 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_long_s1 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_long_s2 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_long_s3 --suites test grid mass behaviour
+  # Seeds 4-5: Obstacles (E1), Navigation from scratch (E1) and from Obstacles (E5)
+  - --policy ppo_obstacles_normal_s4 --suites test
+  - --policy ppo_obstacles_normal_s5 --suites test
+  - --policy ppo_navigation_normal_s4 --suites test
+  - --policy ppo_navigation_normal_s5 --suites test
+  - --policy ppo_navigation_from_obstacles_s4 --suites test
+  - --policy ppo_navigation_from_obstacles_s5 --suites test
