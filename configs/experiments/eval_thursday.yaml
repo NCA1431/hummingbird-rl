@@ -1,0 +1,84 @@
+# Evaluation of every agent trained on Wednesday night and Thursday morning (66 jobs).
+#
+#     uv run python scripts/launch.py configs/experiments/eval_thursday.yaml --parallel 7
+#
+# Launch only once every training job has finished: an evaluation reads model.zip, which a
+# run writes at its very end. Each job evaluates the final model of one run on the task it
+# was trained on, with the tests listed (see hummingbird_rl/evaluation/suites.py), and logs
+# it to W&B in the group "eval". Results: results/eval/<run>/<task>/.
+# About 3 hours of work in total if done one after the other, so about 25-30 min with 7 at once.
+# The full sets come first because they are the longest.
+script: scripts/evaluate.py
+common: --wandb
+jobs:
+  # Hover: E1 (PPO, SAC, TD3), E2 (randomised), E3 (fine-tuned): the full set of tests
+  - --policy ppo_hover_normal_s1 --suites test grid mass failure
+  - --policy ppo_hover_normal_s2 --suites test grid mass failure
+  - --policy ppo_hover_normal_s3 --suites test grid mass failure
+  - --policy sac_hover_normal_s1 --suites test grid mass failure
+  - --policy sac_hover_normal_s2 --suites test grid mass failure
+  - --policy sac_hover_normal_s3 --suites test grid mass failure
+  - --policy td3_hover_normal_s1 --suites test grid mass failure
+  - --policy td3_hover_normal_s2 --suites test grid mass failure
+  - --policy td3_hover_normal_s3 --suites test grid mass failure
+  - --policy ppo_hover_randomised_s1 --suites test grid mass failure
+  - --policy ppo_hover_randomised_s2 --suites test grid mass failure
+  - --policy ppo_hover_randomised_s3 --suites test grid mass failure
+  - --policy ppo_hover_finetuned_s1 --suites test grid mass failure
+  - --policy ppo_hover_finetuned_s2 --suites test grid mass failure
+  - --policy ppo_hover_finetuned_s3 --suites test grid mass failure
+  # Go-to-point: same groups; the behaviour test (turn or back up) replaces the failure test
+  - --policy ppo_goto_normal_s1 --suites test grid mass behaviour
+  - --policy ppo_goto_normal_s2 --suites test grid mass behaviour
+  - --policy ppo_goto_normal_s3 --suites test grid mass behaviour
+  - --policy sac_goto_normal_s1 --suites test grid mass behaviour
+  - --policy sac_goto_normal_s2 --suites test grid mass behaviour
+  - --policy sac_goto_normal_s3 --suites test grid mass behaviour
+  - --policy td3_goto_normal_s1 --suites test grid mass behaviour
+  - --policy td3_goto_normal_s2 --suites test grid mass behaviour
+  - --policy td3_goto_normal_s3 --suites test grid mass behaviour
+  - --policy ppo_goto_randomised_s1 --suites test grid mass behaviour
+  - --policy ppo_goto_randomised_s2 --suites test grid mass behaviour
+  - --policy ppo_goto_randomised_s3 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_s1 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_s2 --suites test grid mass behaviour
+  - --policy ppo_goto_finetuned_s3 --suites test grid mass behaviour
+  # Navigation: E1 (PPO, SAC), E4 (failure -50), E5 (transfer from Obstacles)
+  - --policy ppo_navigation_normal_s1 --suites test
+  - --policy ppo_navigation_normal_s2 --suites test
+  - --policy ppo_navigation_normal_s3 --suites test
+  - --policy sac_navigation_normal_s1 --suites test
+  - --policy sac_navigation_normal_s2 --suites test
+  - --policy sac_navigation_normal_s3 --suites test
+  - --policy ppo_navigation_f50_s1 --suites test
+  - --policy ppo_navigation_f50_s2 --suites test
+  - --policy ppo_navigation_f50_s3 --suites test
+  - --policy ppo_navigation_from_obstacles_s1 --suites test
+  - --policy ppo_navigation_from_obstacles_s2 --suites test
+  - --policy ppo_navigation_from_obstacles_s3 --suites test
+  # Obstacles: E1 (PPO, SAC)
+  - --policy ppo_obstacles_normal_s1 --suites test
+  - --policy ppo_obstacles_normal_s2 --suites test
+  - --policy ppo_obstacles_normal_s3 --suites test
+  - --policy sac_obstacles_normal_s1 --suites test
+  - --policy sac_obstacles_normal_s2 --suites test
+  - --policy sac_obstacles_normal_s3 --suites test
+  # Hover ablations (E4): the test set is enough, the comparison is mostly the learning curves
+  - --policy ppo_hover_noclip_s1 --suites test
+  - --policy ppo_hover_noclip_s2 --suites test
+  - --policy ppo_hover_noclip_s3 --suites test
+  - --policy ppo_hover_noadvnorm_s1 --suites test
+  - --policy ppo_hover_noadvnorm_s2 --suites test
+  - --policy ppo_hover_noadvnorm_s3 --suites test
+  - --policy ppo_hover_lambda0_s1 --suites test
+  - --policy ppo_hover_lambda0_s2 --suites test
+  - --policy ppo_hover_lambda0_s3 --suites test
+  - --policy ppo_hover_lambda1_s1 --suites test
+  - --policy ppo_hover_lambda1_s2 --suites test
+  - --policy ppo_hover_lambda1_s3 --suites test
+  - --policy ppo_hover_nohoverinit_s1 --suites test
+  - --policy ppo_hover_nohoverinit_s2 --suites test
+  - --policy ppo_hover_nohoverinit_s3 --suites test
+  - --policy sac_hover_fixedalpha_s1 --suites test
+  - --policy sac_hover_fixedalpha_s2 --suites test
+  - --policy sac_hover_fixedalpha_s3 --suites test

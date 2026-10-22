@@ -6,8 +6,8 @@
 
 --policy is "pid", "lqr", a run name (the most recent run with that name is used)
 or the path of a model .zip. For a trained agent the final model is evaluated
-(--which best for the best validation model), on the task it was trained on
-unless --tasks says otherwise.
+(--which best for the best validation model, saved as <run>_best), on the task it
+was trained on unless --tasks says otherwise.
 
 The suites are described in hummingbird_rl/evaluation/suites.py. Results go to
 results/eval/<policy>/<task>/<suite>.csv (one row per episode or grid cell) and
@@ -22,6 +22,7 @@ import sys
 import time
 from pathlib import Path
 
+import torch
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,7 +39,9 @@ def load_policy(spec: str, which: str):
     run_dir = resolve_model(spec).parent
     config = yaml.safe_load((run_dir / "config.yaml").read_text())
     model = ALGOS[config["algo"]].load(run_dir / ("model.zip" if which == "final" else "best_model.zip"), device="cpu")
-    return model, {"name": run_dir.name.rsplit("_", 2)[0], "run": run_dir.name, "which": which,
+    # The best-validation model gets its own name, so that its results never overwrite the final model's.
+    name = run_dir.name.rsplit("_", 2)[0] + ("_best" if which == "best" else "")
+    return model, {"name": name, "run": run_dir.name, "which": which,
                    "algo": config["algo"], "task": config["task"], "env": config.get("env") or {}}
 
 
@@ -60,7 +63,9 @@ def main() -> None:
     ap.add_argument("--episodes", type=int, default=None, help="episodes per suite (per cell for grid and mass)")
     ap.add_argument("--wandb", action="store_true")
     ap.add_argument("--project", default="hummingbird-rl")
+    ap.add_argument("--threads", type=int, default=1, help="torch threads; keep 1 when several evaluations run at once")
     args = ap.parse_args()
+    torch.set_num_threads(args.threads)   # one decision at a time: more threads would only compete
 
     policy, meta = load_policy(args.policy, args.which)
     tasks = args.tasks or ([meta["task"]] if meta["task"] else None)

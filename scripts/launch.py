@@ -1,11 +1,14 @@
-"""Run a list of training jobs from a YAML file, a few at a time.
+"""Run a list of jobs from a YAML file, a few at a time.
 
     uv run python scripts/launch.py configs/experiments/pilots.yaml --parallel 7
     uv run python scripts/launch.py configs/experiments/pilots.yaml --dry-run
 
-Each job is one call to hummingbird_rl.training.train; its output goes to
-results/logs/<run name>_<date>_<time>.log. Jobs start in the order of the file, so the
-longest should come first. A job that fails does not stop the others.
+By default each job is one call to hummingbird_rl.training.train. A file can
+name another script instead, with a line `script: scripts/evaluate.py`; this
+is how the evaluations of many trained agents are run in parallel too.
+A job's output goes to results/logs/<job name>_<date>_<time>.log. Jobs start
+in the order of the file, so the longest should come first. A job that fails
+does not stop the others.
 """
 
 import argparse
@@ -27,6 +30,21 @@ def run_name(job: list[str]) -> str:
     return a.name or f"{a.algo}_{a.task}_{a.regime}_s{a.seed}"
 
 
+def job_name(job: list[str], script: str | None) -> str:
+    """The run name for a training job; for another script, its name and first argument value,
+    e.g. evaluate_ppo_hover_normal_s1."""
+    if script is None:
+        return run_name(job)
+    values = [a for a in job if not a.startswith("--")]
+    return f"{Path(script).stem}_{values[0]}" if values else Path(script).stem
+
+
+def command(job: list[str], script: str | None) -> list[str]:
+    if script is None:
+        return [sys.executable, "-m", "hummingbird_rl.training.train", *job]
+    return [sys.executable, str(ROOT / script), *job]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("file")
@@ -35,6 +53,7 @@ def main() -> None:
     args = ap.parse_args()
 
     spec = yaml.safe_load(Path(args.file).read_text())
+    script = spec.get("script")                 # None: the training script
     common = shlex.split(spec.get("common", ""))
     jobs = [shlex.split(j) + common for j in spec["jobs"]]
     logs = ROOT / "results" / "logs"
@@ -42,17 +61,16 @@ def main() -> None:
 
     if args.dry_run:
         for job in jobs:
-            print(run_name(job), "<-", " ".join(job))
+            print(job_name(job, script), "<-", " ".join(job))
         return
 
     pending, running, t_start = list(jobs), [], time.time()
     while pending or running:
         while pending and len(running) < args.parallel:
             job = pending.pop(0)
-            name = run_name(job)
+            name = job_name(job, script)
             log = open(logs / f"{name}_{time.strftime('%Y-%m-%d_%H%M%S')}.log", "w")
-            proc = subprocess.Popen([sys.executable, "-m", "hummingbird_rl.training.train", *job],
-                                    stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
+            proc = subprocess.Popen(command(job, script), stdout=log, stderr=subprocess.STDOUT, cwd=ROOT)
             running.append((proc, name, log, time.time()))
             print(f"{time.strftime('%H:%M')}  started  {name}", flush=True)
         for item in list(running):
