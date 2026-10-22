@@ -17,6 +17,7 @@ export class Stage {
   readonly sunDirection = new THREE.Vector3(1.2, 3.0, 0.8).normalize(); // towards the sun
   private readonly sun: THREE.DirectionalLight;
   private last = performance.now();
+  private inEye = false; // first-person view: the orbit controls are off
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     // alpha: the sky is the page's CSS gradient behind the canvas.
@@ -68,7 +69,7 @@ export class Stage {
       this.last = now;
       this.resize();
       frame(dt);
-      this.controls.update();
+      if (!this.inEye) this.controls.update();
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(loop);
     };
@@ -84,8 +85,34 @@ export class Stage {
 
   /** Puts the camera at `offset` from `target` and looks at it. */
   view(target: THREE.Vector3, offset: THREE.Vector3): void {
+    this.leaveEye();
     this.controls.target.copy(target);
     this.camera.position.copy(target).add(offset);
+  }
+
+  /**
+   * First-person view from `pos`, looking along the heading `yaw` (rad) and slightly down. The
+   * horizon stays level, as a hummingbird keeps its head level while its body rocks; the
+   * body's own roll and pitch would make the view unwatchable. A wider lens than the orbit
+   * camera's, closer to a bird's field of view (still far from its nearly 300°).
+   */
+  eye(pos: THREE.Vector3, yaw: number): void {
+    if (!this.inEye) {
+      this.inEye = true;
+      this.controls.enabled = false;
+      this.camera.fov = 75;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.position.copy(pos);
+    this.camera.rotation.set(-0.12, yaw - Math.PI / 2, 0, "YXZ"); // the camera looks along -z, the bird along +x
+  }
+
+  private leaveEye(): void {
+    if (!this.inEye) return;
+    this.inEye = false;
+    this.controls.enabled = true;
+    this.camera.fov = 45;
+    this.camera.updateProjectionMatrix();
   }
 
   private resize(): void {

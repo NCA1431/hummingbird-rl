@@ -1,5 +1,5 @@
 /**
- * A small seeded random generator for the browser (gusts, sensor and actuator noise).
+ * A small seeded random generator for the browser (scenes, conditions, gusts, noise).
  *
  * JavaScript's Math.random cannot be seeded, and we want a sandbox run to be
  * repeatable. It does not reproduce NumPy's draws: the parity tests never
@@ -21,6 +21,16 @@ export class Rng {
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  /** Uniform in [lo, hi), like NumPy's rng.uniform(lo, hi). */
+  between(lo: number, hi: number): number {
+    return lo + (hi - lo) * this.uniform();
+  }
+
+  /** Integer in [lo, hi), like NumPy's rng.integers(lo, hi). */
+  integer(lo: number, hi: number): number {
+    return lo + Math.floor((hi - lo) * this.uniform());
   }
 
   /** Standard normal, by the Box-Muller transform (which gives two values per draw; we keep the second). */

@@ -11,7 +11,7 @@ web viewer comes next.
 cd C:\Users\nca18\projects\hummingbird-rl
 uv sync                 # creates .venv with Python 3.12, installs PyTorch (CUDA) and everything else, writes uv.lock
 uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-uv run pytest           # 135 passed
+uv run pytest           # 139 passed
 ```
 
 `uv.lock` pins every version: commit it.
@@ -54,13 +54,15 @@ uv run python -c "from hummingbird_rl.envs import make_env; env = make_env('goto
 
 ## Web viewer
 
-Needs Node.js (LTS). The viewer replays recorded test episodes with a drawn hummingbird whose
-wings follow measured wing kinematics; the simulator is also ported to TypeScript and checked
-against the Python one on recorded trajectories (`web/tests/golden/`).
+Needs Node.js (LTS). Two modes. **Recorded** replays test episodes exactly as they were measured.
+**Live** flies new random episodes in the browser: the simulator, the tasks, the PID, the LQR and the
+trained networks are ported to TypeScript and checked against the Python code on recorded inputs and
+outputs (`web/tests/golden/`): whole PID and LQR episodes agree to 1e-9 m, the networks to 1e-5.
 
 ```powershell
 uv run python scripts/export_web.py episodes --policy pid --tasks hover goto obstacles navigation
 uv run python scripts/export_web.py episodes --policy ppo_goto_normal_s1      # a trained agent, on its task
+uv run python scripts/export_web.py policy --policy ppo_goto_normal_s1        # its network, for the live mode
 cd web
 npm ci                  # once, and after any change to package-lock.json
 npm test                # parity of the TypeScript simulator with the Python one, and the viewer's logic

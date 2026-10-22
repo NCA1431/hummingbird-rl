@@ -21,6 +21,11 @@
  * with its shadow. And the ambient term is a quarter lower: the earlier viewer
  * showed the bird on a dark grey background, ours on a light sky, against which
  * the same shading looked flat.
+ *
+ * One addition: a damaged wing turns orange-red in proportion to its damage
+ * (fully at 40%), as on the drawn bird. Each vertex carries how much it belongs
+ * to the left and to the right wing (`wingWeight`, from its skinning weights,
+ * computed in bird.ts), so the colour fades smoothly into the body.
  */
 
 import * as THREE from "three";
@@ -29,12 +34,16 @@ const vertexShader = /* glsl */ `
 #include <common>
 #include <skinning_pars_vertex>
 
+attribute vec2 wingWeight;
+
 varying vec2 vUv;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
+varying vec2 vWing;
 
 void main() {
   vUv = uv;
+  vWing = wingWeight;
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
   #include <skinnormal_vertex>
@@ -56,14 +65,17 @@ uniform vec3 keyDir;
 uniform vec3 fillDir;
 uniform float exposure;
 uniform float alphaCutoff;
+uniform vec2 damage;   // force lost by the (left, right) wing, 0 to 1
 
 varying vec2 vUv;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
+varying vec2 vWing;
 
 const vec3 KEY_COL  = vec3(1.15, 1.10, 1.00);   // warm
 const vec3 FILL_COL = vec3(0.38, 0.44, 0.55);   // cool and soft
 const vec3 AMBIENT  = vec3(0.47, 0.48, 0.53);   // 75% of the earlier viewer's, for more contrast
+const vec3 HURT     = vec3(0.19, 0.05, 0.012);  // orange-red, in the raw albedo's units (x exposure)
 
 // Normal map without tangents: the surface frame is rebuilt from screen-space
 // derivatives of the position and of the texture coordinates.
@@ -84,6 +96,8 @@ vec3 perturbNormal(vec3 pos, vec3 n, vec2 uv, vec3 mapN) {
 void main() {
   vec4 albedo = texture2D(albedoTex, vUv);
   if (albedo.a < alphaCutoff) discard;
+  float hurt = clamp(dot(vWing, damage) / 0.4, 0.0, 1.0);
+  albedo.rgb = mix(albedo.rgb, HURT, 0.8 * hurt);
   vec4 sg = texture2D(specglossTex, vUv);
   vec3 specColor = sg.rgb;   // the colour of the glints
   float gloss = sg.a;
@@ -147,6 +161,7 @@ export function featherMaterial(
       fillDir: { value: new THREE.Vector3(-0.6, 0.35, -0.7).normalize() },
       exposure: { value: 4.2 },
       alphaCutoff: { value: 0.5 },
+      damage: { value: new THREE.Vector2(0, 0) },
     },
   });
 }

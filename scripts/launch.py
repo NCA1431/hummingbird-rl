@@ -32,11 +32,14 @@ def run_name(job: list[str]) -> str:
 
 def job_name(job: list[str], script: str | None) -> str:
     """The run name for a training job; for another script, its name and first argument value,
-    e.g. evaluate_ppo_hover_normal_s1."""
+    e.g. evaluate_ppo_hover_normal_s1, plus "_best" for an evaluation of the best model, so that
+    two evaluations of the same run never share a log file."""
     if script is None:
         return run_name(job)
     values = [a for a in job if not a.startswith("--")]
-    return f"{Path(script).stem}_{values[0]}" if values else Path(script).stem
+    name = f"{Path(script).stem}_{values[0]}" if values else Path(script).stem
+    best = any(a == "--which" and b == "best" for a, b in zip(job, job[1:]))
+    return name + "_best" if best else name
 
 
 def command(job: list[str], script: str | None) -> list[str]:

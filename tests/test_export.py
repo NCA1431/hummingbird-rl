@@ -7,20 +7,24 @@ import pytest
 import torch
 from stable_baselines3 import PPO, SAC, TD3
 
-from hummingbird_rl.controllers import PIDController
+from hummingbird_rl.controllers import LQRController, PIDController
 from hummingbird_rl.envs import HummingbirdEnv
 from hummingbird_rl.envs.observation import build_observation
 from hummingbird_rl.evaluation import TEST_SEED, run_episode
 from hummingbird_rl.export import (
     build_index,
+    build_policy_index,
     golden_dynamics,
+    golden_episodes,
     golden_observations,
+    golden_policies,
+    lqr_dict,
     mlp_forward,
     policy_to_dict,
     record_episode,
     save_json,
 )
-from hummingbird_rl.sim import BirdDynamics, BirdParams, BirdState
+from hummingbird_rl.sim import DEFAULT_PARAMS, BirdDynamics, BirdParams, BirdState, hover_action
 from hummingbird_rl.world.scene import Obstacle
 
 
@@ -89,3 +93,36 @@ def test_golden_observations_replay_from_the_file():
         obs = build_observation(state, [np.array(t) for t in case["targets"]], obstacles,
                                 np.array(case["prev_action"]), case["hold"], case["r_bird"])
         assert np.array_equal(obs, np.array(case["expected"], dtype=np.float32))
+
+
+def test_lqr_export_is_the_controllers_gain():
+    data = json.loads(json.dumps(lqr_dict()))
+    assert np.array_equal(np.array(data["K"]), LQRController().K)          # exact, through JSON
+    assert data["u0"] == hover_action(DEFAULT_PARAMS).tolist()
+
+
+def test_policy_index_lists_every_network(tmp_path):
+    model = PPO("MlpPolicy", HummingbirdEnv("hover", "normal"), policy_kwargs={"net_arch": [8, 8]}, device="cpu")
+    for name in ("b_net", "a_net"):
+        save_json({**policy_to_dict(model, name), "task": "hover", "which": "final"}, tmp_path / f"{name}.json")
+    save_json({"policies": []}, tmp_path / "index.json")                    # an old index is not a network
+    index = build_policy_index(tmp_path)
+    assert [e["name"] for e in index] == ["a_net", "b_net"]
+    assert index[0] == {"file": "a_net.json", "name": "a_net", "algo": "ppo", "task": "hover", "which": "final"}
+
+
+def test_golden_policies_are_self_consistent():
+    for case in golden_policies(n_obs=3)["cases"]:
+        for obs, expected in zip(case["observations"], case["expected"]):
+            assert np.array_equal(mlp_forward(case["policy"], np.array(obs, dtype=np.float32)), expected)
+
+
+def test_golden_episodes_are_complete():
+    """One episode per task and controller, each with one action, reward and position per decision."""
+    cases = golden_episodes()["cases"]
+    assert {(c["task"], c["controller"]) for c in cases} == {
+        (t, k) for t in ("hover", "goto", "obstacles", "navigation") for k in ("pid", "lqr")}
+    for c in cases:
+        n = c["result"]["length"]
+        assert len(c["actions"]) == len(c["rewards"]) == len(c["pos"]) == n
+        assert c["conditions"]["action_noise"] == c["conditions"]["obs_noise"] == c["conditions"]["gust_sigma"] == 0.0

@@ -101,18 +101,24 @@ export class World {
   }
 }
 
-/** The path of the whole episode, coloured by speed (blue slow, red at 1 m/s and above). */
+/**
+ * The path of the whole episode, coloured by speed (blue slow, red at 1 m/s and above),
+ * and grey for what is shown after the episode's end (live mode, after a loss of control).
+ */
 function makeTrail(ep: Episode): THREE.Line {
   const f = ep.frames;
   const positions = new Float32Array(f.pos.length * 3);
   const colors = new Float32Array(f.pos.length * 3);
   const slow = new THREE.Color(0x2563eb);
   const fast = new THREE.Color(0xdc2626);
+  const after = new THREE.Color(0x8a8f96);
+  const end = ep.endFrame ?? f.pos.length;
   const c = new THREE.Color();
   f.pos.forEach((p, i) => {
     positions.set(p, 3 * i);
     const v = f.vel[i];
-    c.copy(slow).lerp(fast, Math.min(1, Math.hypot(v[0], v[1], v[2])));
+    if (i > end) c.copy(after);
+    else c.copy(slow).lerp(fast, Math.min(1, Math.hypot(v[0], v[1], v[2])));
     c.toArray(colors, 3 * i);
   });
   const geo = new THREE.BufferGeometry();

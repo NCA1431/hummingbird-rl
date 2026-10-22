@@ -31,7 +31,7 @@
         position: absolute;
         left: 12px;
         right: 12px;
-        max-width: 760px;
+        max-width: 860px;
         padding: 10px 14px;
         border-radius: 10px;
         background: var(--panel);
@@ -42,7 +42,7 @@
       #hud {
         top: 12px;
       }
-      #live {
+      #readout {
         color: var(--muted);
         font-variant-numeric: tabular-nums;
       }
@@ -75,10 +75,57 @@
         border-color: var(--accent);
         color: white;
       }
-      #time {
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .seg {
+        display: inline-flex;
+      }
+      .seg button:first-child {
+        border-radius: 6px 0 0 6px;
+      }
+      .seg button:last-child {
+        border-radius: 0 6px 6px 0;
+        border-left: none;
+      }
+      #timeline {
+        position: relative;
         flex: 1;
         min-width: 140px;
+        display: flex;
+        align-items: center;
+      }
+      #time {
+        width: 100%;
+        margin: 0;
         accent-color: var(--accent);
+      }
+      /* On the timeline: a red tick when the wing fails, and a hatched band over what the
+         live mode shows after the end of the episode. 8 px is half the slider's thumb. */
+      .mark {
+        position: absolute;
+        top: 50%;
+        width: 3px;
+        height: 16px;
+        margin: -8px 0 0 -1.5px;
+        border-radius: 2px;
+        background: #c2410c;
+        pointer-events: none;
+      }
+      .after-band {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        height: 10px;
+        margin-top: -5px;
+        border-radius: 2px;
+        background: repeating-linear-gradient(135deg, rgba(55, 65, 81, 0.55) 0 3px, transparent 3px 6px);
+        pointer-events: none;
+      }
+      #clock {
+        font-variant-numeric: tabular-nums;
+        min-width: 92px;
       }
       .label {
         color: var(--muted);
@@ -96,13 +143,27 @@
         max-width: 230px;
         text-align: right;
       }
-      #credits {
+      #credits,
+      #legend {
         display: none;
         top: auto;
         bottom: 150px;
       }
-      #credits.open {
+      #credits.open,
+      #legend.open {
         display: block;
+      }
+      #legend ul {
+        margin: 4px 0 0;
+        padding-left: 18px;
+      }
+      .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        vertical-align: -1px;
+        margin-right: 4px;
       }
       #credits a {
         color: var(--accent);
@@ -118,9 +179,27 @@
     <canvas id="view"></canvas>
     <div id="hud" class="panel">
       <div id="info">Loading…</div>
-      <div id="live"></div>
+      <div id="readout"></div>
     </div>
-    <div id="about">Hummingbird RL · recorded test episodes, replayed exactly as they were measured.</div>
+    <div id="about"></div>
+    <div id="legend" class="panel">
+      <b>What you see</b>
+      <ul>
+        <li><span class="swatch" style="background: #f0a020"></span><b>Orange ball</b>: the target zone, 3 cm in radius.
+          Go-to-point, obstacles and the last navigation waypoint: the bird must stay inside for 0.25 s, slower than
+          10 cm/s ("holding" in the panel). Hover: it must stay within 3 cm on average over the last 2 s.
+          The other navigation waypoints are 4 cm balls, only to be crossed. Faded: already reached.
+          The dashed line gives the target's height.</li>
+        <li><span class="swatch" style="background: #8a7a68"></span><b>Brown spheres</b>: obstacles; touching one ends the flight.</li>
+        <li><b>Trail</b>: the path flown, blue when slow, red at 1 m/s and more; grey after the end of the episode.</li>
+        <li><b>Blue arrow</b> above the bird: the wind (50 cm = a wind as strong as the bird's weight).</li>
+        <li><b>Orange-red wing</b>: a wing that has lost force (fully coloured at 40%).</li>
+        <li><b>Grey ring</b> on the ground: the start point. <b>Green disc</b>: the arena, 1.5 m in radius and
+          1.2 m high, with 10 cm squares.</li>
+        <li><b>Timeline</b>: red tick = sudden wing failure; hatched band = after the end of the episode
+          (live mode only: shown, not counted).</li>
+      </ul>
+    </div>
     <div id="credits" class="panel">
       <b>Credits</b><br />
       3D hummingbird: <a href="https://sketchfab.com/3d-models/animated-hovering-flying-hummingbird-loop-102884713a2742ce829e368d2a790c45" target="_blank" rel="noopener">“Animated Hovering Flying Hummingbird Loop”</a>
@@ -132,14 +211,30 @@
     </div>
     <div id="controls" class="panel">
       <div class="row">
+        <span class="seg">
+          <button id="mode-recorded" class="on" title="Test episodes recorded in Python">Recorded</button>
+          <button id="mode-live" title="New flights simulated in your browser">Live</button>
+        </span>
         <select id="task" aria-label="Task"></select>
         <select id="policy" aria-label="Controller"></select>
         <select id="episode" aria-label="Episode"></select>
+        <select id="regime" aria-label="Conditions" hidden>
+          <option value="normal" title="Light breeze, small sensor and actuator noise">normal conditions</option>
+          <option value="randomised" title="Wind up to 30% of the weight, mass ±25%, a weakened wing">randomised conditions</option>
+          <option value="failure" title="One wing suddenly loses 40% of its force">sudden wing failure</option>
+          <option value="calm" title="No wind, no noise">calm air</option>
+        </select>
+        <button id="new-flight" title="A new random situation (key N)" hidden>New flight</button>
       </div>
       <div class="row">
         <button id="play">Pause</button>
         <button id="restart">Restart</button>
-        <input id="time" type="range" min="0" max="1" step="0.0167" value="0" aria-label="Time" />
+        <span id="timeline">
+          <input id="time" type="range" min="0" max="1" step="0.0167" value="0" aria-label="Time" />
+          <span id="mark-failure" class="mark" title="Sudden wing failure" hidden></span>
+          <span id="after-band" class="after-band" hidden></span>
+        </span>
+        <span id="clock" class="label">0.00 / 0.00 s</span>
         <span class="label">speed</span>
         <span id="speeds" class="row" style="width: auto"></span>
       </div>
@@ -149,10 +244,12 @@
         <button data-camera="side">Side</button>
         <button data-camera="top">Top</button>
         <button data-camera="behind">Behind</button>
+        <button data-camera="eye" title="What the bird sees, horizon kept level">Bird's eye</button>
         <button data-camera="overview">Overview</button>
         <button id="scale">Bird ×1</button>
         <button id="model" disabled>Drawn bird</button>
         <label class="label"><input id="wind" type="checkbox" checked /> wind</label>
+        <button id="legend-button">Legend</button>
         <button id="credits-button">Credits</button>
       </div>
     </div>

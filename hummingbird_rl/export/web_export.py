@@ -16,6 +16,12 @@ trained on, we record here, with the Python code, a set of inputs (start
 state, conditions, actions, wind) and the resulting outputs; the TypeScript
 tests must reproduce them to 1e-9. The inputs are rounded before they are
 simulated, so the stored outputs are exactly those of the stored inputs.
+The live mode adds three more: small networks with their actions (the
+browser's forward pass), and whole episodes flown by the PID and the LQR
+(the TypeScript tasks, environment loop and controllers together).
+
+The LQR gain. The browser runs the LQR but does not solve its Riccati
+equation: the gain K is computed here and shipped with the viewer.
 """
 
 from __future__ import annotations
@@ -23,14 +29,17 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import asdict
-from math import pi, radians
+from math import cos, pi, radians, sin
+from pathlib import Path
 
 import numpy as np
 import torch
 from stable_baselines3 import PPO, SAC, TD3
 from stable_baselines3.common.torch_layers import FlattenExtractor
 
-from hummingbird_rl.controllers import PIDController
+from hummingbird_rl.controllers import LQRController, PIDController
+from hummingbird_rl.envs.disturbances import Conditions
+from hummingbird_rl.envs.hummingbird_env import HummingbirdEnv
 from hummingbird_rl.envs.observation import OBS_SIZE, build_observation
 from hummingbird_rl.sim import DEFAULT_PARAMS, BirdDynamics, BirdParams, BirdState, check_limits, hover_action
 from hummingbird_rl.world.scene import START, Obstacle
@@ -101,6 +110,27 @@ def mlp_forward(policy: dict, obs: np.ndarray) -> np.ndarray:
         elif layer["activation"] == "relu":
             x = np.maximum(x, 0.0)
     return np.tanh(x) if policy["output"] == "tanh" else np.clip(x, -1.0, 1.0)
+
+
+def build_policy_index(folder: Path) -> list[dict]:
+    """One line per exported network in `folder`, for the live mode's menu (rebuilt from the files)."""
+    entries = []
+    for path in sorted(folder.glob("*.json")):
+        if path.name == "index.json":
+            continue
+        d = json.loads(path.read_text())
+        entries.append({"file": path.name, "name": d["name"], "algo": d["algo"], "task": d.get("task"),
+                        "which": d.get("which", "final")})
+    return entries
+
+
+def lqr_dict(p: BirdParams = DEFAULT_PARAMS) -> dict:
+    """The LQR's gain K (5 x 14: 11 states + 3 integrals) and the settings its control law needs."""
+    c = LQRController(p)
+    w = c.w
+    return {"format": "hummingbird-lqr/1", "K": c.K.tolist(), "u0": c.u0.tolist(), "dt": c.dt,
+            "saturation": w.saturation, "integral_radius": w.integral_radius, "integral_max": w.integral_max,
+            "carrot_gain": w.carrot_gain}
 
 
 # --- golden files ---------------------------------------------------------------------
@@ -245,3 +275,87 @@ def golden_observations(n_cases: int = 20, seed: int = 1) -> dict:
                       "prev_action": prev_action.tolist(), "hold": hold, "r_bird": p.r_bird,
                       "expected": [float(v) for v in obs]})
     return {"format": "hummingbird-golden-observations/1", "cases": cases}
+
+
+def golden_policies(n_obs: int = 12, seed: int = 2) -> dict:
+    """Three small networks and their actions on observations taken from a real flight.
+
+    PPO's layers use tanh and its output is clipped; SAC's and TD3's use ReLU and
+    their output goes through tanh, so every branch of the browser's forward pass
+    is exercised. The weights get extra noise, as in the Python test, so that the
+    clipping and the tanh saturation really happen. Small layers (16) keep the
+    file small; the format does not depend on the size.
+    """
+    env = HummingbirdEnv("obstacles", "normal")
+    pid = PIDController()
+    obs, _ = env.reset(seed=seed)
+    observations = []
+    while len(observations) < n_obs:
+        for _ in range(10):
+            obs, _, terminated, truncated, _ = env.step(pid.predict(obs)[0])
+            if terminated or truncated:
+                obs, _ = env.reset()
+                pid.reset()
+        observations.append(obs.copy())
+    torch.manual_seed(seed)
+    cases = []
+    for algo in (PPO, SAC, TD3):
+        kwargs = {} if algo is PPO else {"buffer_size": 100}
+        model = algo("MlpPolicy", env, policy_kwargs={"net_arch": [16, 16]}, seed=seed, device="cpu", **kwargs)
+        with torch.no_grad():
+            for w in model.policy.parameters():
+                w.add_(0.3 * torch.randn_like(w))
+        policy = policy_to_dict(model, algo.__name__.lower())
+        cases.append({"policy": policy, "observations": [o.tolist() for o in observations],
+                      "expected": [mlp_forward(policy, o).tolist() for o in observations]})
+    return {"format": "hummingbird-golden-policies/1", "cases": cases}
+
+
+# One episode per task: (task, wind as a fraction of the weight, other conditions). No noise
+# and no gusts, so that the flight is deterministic; the steady wind, the mass, the damage and
+# the sudden failure still make the controllers' integrators and the potential field work.
+GOLDEN_EPISODES = [
+    ("hover", 0.10, {"failure_time": 2.0, "failure_wing": 1, "failure_amount": 0.4}),
+    ("goto", 0.15, {"mass_factor": 1.1}),
+    ("obstacles", 0.05, {"damage": (0.2, 0.0)}),
+    ("navigation", 0.05, {}),
+]
+
+
+def golden_episodes(seed: int = 3) -> dict:
+    """Whole episodes flown by the PID and by the LQR.
+
+    In: the scene, the conditions and the start state. Out: every action, reward
+    and position, and how the episode ended. One comparison checks at once the
+    TypeScript tasks (rewards, holds, waypoints, end of the episode), the
+    environment loop (sudden failure, limits, collisions) and both controllers.
+    """
+    p = DEFAULT_PARAMS
+    cases = []
+    for i, (task, wind, extra) in enumerate(GOLDEN_EPISODES):
+        angle = np.random.default_rng(seed + i).uniform(-pi, pi)
+        conditions = Conditions(mean_wind=wind * p.weight * np.array([cos(angle), 0.0, sin(angle)]), **extra)
+        for controller in (PIDController(p), LQRController(p)):
+            env = HummingbirdEnv(task, "calm", p)
+            obs, _ = env.reset(seed=seed + i, options={"conditions": conditions})
+            start = env.state.copy()
+            controller.reset()
+            actions, rewards, positions = [], [], []
+            while True:
+                action = controller.act(obs)
+                obs, reward, terminated, truncated, info = env.step(action)
+                actions.append(_r(action))
+                rewards.append(_r(reward))
+                positions.append(_r(env.state.pos))
+                if terminated or truncated:
+                    break
+            cases.append({
+                "task": task, "controller": controller.name, "scene": env.scene.to_dict(),
+                "conditions": conditions.to_dict(),
+                "start": {"pos": start.pos.tolist(), "vel": start.vel.tolist(), "quat": start.quat.tolist(),
+                          "omega": start.omega.tolist()},
+                "actions": actions, "rewards": rewards, "pos": positions,
+                "result": {"reason": info["reason"], "success": bool(info["is_success"]), "length": len(actions),
+                           "energy": _r(info["energy"]), "waypoints": info.get("waypoints_reached")},
+            })
+    return {"format": "hummingbird-golden-episodes/1", "cases": cases}

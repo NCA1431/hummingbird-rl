@@ -31,6 +31,7 @@ describe("watch mode", () => {
     expect(s.pos[0]).toBeCloseTo(0.015, 12);
     expect(s.thrust).toBeCloseTo(0.045, 12);
     expect(s.action).toEqual([1, 1, 0, 0, 0]);
+    s.wingAction.forEach((a, i) => expect(a).toBeCloseTo([0.8, 0.8, 0, 0, 0][i], 12)); // halfway between decisions
   });
 
   it("stays on the first and last frames outside the episode", () => {

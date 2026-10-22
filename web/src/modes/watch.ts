@@ -29,6 +29,9 @@ export interface Episode {
     failure_amount: number;
   };
   result: { success: boolean; reason: string; return: number; length: number; energy: number };
+  // Live mode only: the frame at which the episode ended, when frames follow it (what happened
+  // after a loss of control, shown but not counted). Recorded episodes stop at their end.
+  endFrame?: number;
   frames: {
     t: number[];
     pos: Vec3[];
@@ -61,6 +64,10 @@ export interface Sample {
   quat: Quat;
   vel: Vec3;
   action: number[]; // the action applied between this frame and the next
+  // For drawing the wings only: the action blended from the previous decision to this one.
+  // The controller changes its command 60 times per simulated second; in slow motion each
+  // change would make the wings jump (at ×1/64, about once per real second).
+  wingAction: number[];
   thrust: number;
   wind: Vec3;
   target: number;
@@ -83,6 +90,11 @@ export function duration(ep: Episode): number {
   return ep.frames.t[ep.frames.t.length - 1];
 }
 
+/** When the episode itself ended (before any frames shown after it). */
+export function endTime(ep: Episode): number {
+  return ep.frames.t[ep.endFrame ?? ep.frames.t.length - 1];
+}
+
 export function sampleEpisode(ep: Episode, t: number): Sample {
   const f = ep.frames;
   const last = f.t.length - 1;
@@ -96,6 +108,7 @@ export function sampleEpisode(ep: Episode, t: number): Sample {
     quat: nlerp(f.quat[k], f.quat[next], u),
     vel: lerp3(f.vel[k], f.vel[next], u),
     action: f.action[next],
+    wingAction: f.action[k].map((a, i) => lerp(a, f.action[next][i], u)),
     thrust: lerp(f.thrust[k], f.thrust[next], u),
     wind: lerp3(f.wind[k], f.wind[next], u),
     target: f.target[u < 0.5 ? k : next],

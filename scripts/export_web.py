@@ -5,12 +5,15 @@
     uv run python scripts/export_web.py episodes --policy ppo_hover_normal_s1 --suite failure --episodes 5
     uv run python scripts/export_web.py policy --policy ppo_hover_normal_s1
 
-golden    web/tests/golden/dynamics.json and observations.json, for the parity tests
-          of the TypeScript simulator (to regenerate only if the physics changes)
+golden    web/tests/golden/*.json, for the parity tests of the TypeScript simulator,
+          networks, tasks and controllers, and web/src/control/lqr_gains.json, the
+          LQR gain the browser uses (to regenerate only if the physics, the tasks or
+          the controllers change)
 episodes  web/public/episodes/<policy>/<task>/<suite>_<seed>.json + index.json; the
           episodes are the first ones of the evaluation suite (same seeds, same
           conditions), so the viewer shows exactly what was measured
-policy    web/public/policies/<policy>.json, the agent's network for the live mode
+policy    web/public/policies/<policy>.json + index.json, the agent's network for
+          the live mode
 
 --policy works as in evaluate.py: "pid", "lqr", a run name or a model .zip.
 """
@@ -26,7 +29,15 @@ from evaluate import load_policy  # noqa: E402  (scripts/evaluate.py, next to th
 from hummingbird_rl.envs.hummingbird_env import HummingbirdEnv  # noqa: E402
 from hummingbird_rl.evaluation.suites import SEEDS  # noqa: E402
 from hummingbird_rl.export.trajectories import build_index, record_episode, save_json  # noqa: E402
-from hummingbird_rl.export.web_export import golden_dynamics, golden_observations, policy_to_dict  # noqa: E402
+from hummingbird_rl.export.web_export import (  # noqa: E402
+    build_policy_index,
+    golden_dynamics,
+    golden_episodes,
+    golden_observations,
+    golden_policies,
+    lqr_dict,
+    policy_to_dict,
+)
 
 WEB = ROOT / "web"
 REGIMES = {"test": "normal", "failure": "failure"}    # the conditions of each evaluation suite
@@ -34,9 +45,14 @@ REGIMES = {"test": "normal", "failure": "failure"}    # the conditions of each e
 
 def export_golden() -> None:
     out = WEB / "tests" / "golden"
-    for name, data in [("dynamics", golden_dynamics()), ("observations", golden_observations())]:
+    for name, make in [("dynamics", golden_dynamics), ("observations", golden_observations),
+                       ("policies", golden_policies), ("episodes", golden_episodes)]:
+        data = make()
         save_json(data, out / f"{name}.json")
         print(f"wrote {out / name}.json ({len(data['cases'])} cases)")
+    path = WEB / "src" / "control" / "lqr_gains.json"
+    save_json(lqr_dict(), path)
+    print(f"wrote {path}")
 
 
 def export_episodes(args) -> None:
@@ -60,8 +76,10 @@ def export_policy(args) -> None:
     policy, meta = load_policy(args.policy, args.which)
     if args.policy in ("pid", "lqr"):
         sys.exit("pid and lqr are not networks; the viewer has its own copy of them")
-    path = WEB / "public" / "policies" / f"{meta['name']}.json"
+    folder = WEB / "public" / "policies"
+    path = folder / f"{meta['name']}.json"
     save_json({**policy_to_dict(policy, meta["name"]), "task": meta["task"], "which": args.which}, path)
+    save_json({"policies": build_policy_index(folder)}, folder / "index.json")
     print(f"wrote {path} ({path.stat().st_size / 1e3:.0f} kB)")
 
 
