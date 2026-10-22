@@ -1,112 +1,161 @@
 /**
- * Setup check: a three.js scene with the TypeScript simulator running live.
+ * The viewer: replays recorded episodes with the hummingbird, its targets and its trail.
  *
- * Not the viewer yet (that comes with the bird model and the Watch mode).
- * It shows that Node, Vite, TypeScript and three.js work, and that the
- * simulator port runs in the browser: the bird, a small sphere with a cone
- * for its beak, is given the hover action with a small push and no feedback.
- * Hovering is unstable, so it drifts and swings more and more, and hits the
- * ground after about 5 s; then the flight restarts. The controllers fix that.
+ * Episodes are listed in public/episodes/index.json and written by
+ *     uv run python scripts/export_web.py episodes --policy <controller> --tasks ...
+ * The live mode (the simulator and the controllers running in the browser) comes later.
  */
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-import { hoverAction } from "./sim/aero";
-import { type BirdState, BirdDynamics, checkLimits, stateFromEuler } from "./sim/dynamics";
-import { DEFAULT_PARAMS, hoverAmplitude } from "./sim/params";
-import { START } from "./sim/world";
+import { type Episode, type IndexEntry, Playback, damageAt, duration, sampleEpisode } from "./modes/watch";
+import { decodeAction } from "./sim/aero";
+import { DEFAULT_PARAMS, weight } from "./sim/params";
+import { type CameraMode, Panel } from "./ui/panel";
+import { Bird } from "./view/bird";
+import { Stage } from "./view/stage";
+import { World } from "./view/world";
 
 const p = DEFAULT_PARAMS;
+const stage = new Stage(document.querySelector<HTMLCanvasElement>("#view")!);
+const bird = new Bird(p);
+const world = new World();
+stage.scene.add(bird.root, world.root);
 
-// --- scene -----------------------------------------------------------------------------
-const canvas = document.querySelector<HTMLCanvasElement>("#view")!;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+let episode: Episode | null = null;
+let playback: Playback | null = null;
+let phase = 0.0; // wingbeat phase, integrated from the recorded frequency
+let follow = true;
+let showWind = true;
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xdfe9f3);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9a7a, 2.0));
+const panel = new Panel({
+  async select(entry: IndexEntry) {
+    const ep = (await (await fetch(`episodes/${entry.file}`)).json()) as Episode;
+    ep.policy = entry.policy;
+    episode = ep;
+    playback = new Playback(ep);
+    playback.speed = keepSpeed;
+    phase = 0.0;
+    world.load(ep);
+    panel.showEpisode(ep, weight(p) * ep.conditions.mass_factor);
+    setCamera(ep.task === "obstacles" || ep.task === "navigation" ? "overview" : "follow");
+  },
+  playPause() {
+    if (!playback) return;
+    if (!playback.playing && playback.time >= duration(playback.episode)) playback.restart();
+    else playback.playing = !playback.playing;
+  },
+  restart: () => playback?.restart(),
+  speed(s: number) {
+    keepSpeed = s;
+    if (playback) playback.speed = s;
+  },
+  seek: (t: number) => playback?.seek(t),
+  camera: (mode: CameraMode) => setCamera(mode),
+  scale: (s: number) => bird.setScale(s),
+  wind: (show: boolean) => (showWind = show),
+  model: (on: boolean) => bird.showModel(on),
+});
+let keepSpeed = 1 / 4;
 
-// Same axes as the simulator: x forward, y up, z to the right; units in metres.
-const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 50);
-camera.position.set(0.35, 0.62, 0.45); // about 60 cm from the start point
-const controls = new OrbitControls(camera, canvas);
-controls.target.set(START[0], START[1], START[2]);
+/** Camera placements relative to the bird (or the whole scene for "overview"). */
+function setCamera(mode: CameraMode): void {
+  if (!episode || !playback) return;
+  const s = sampleEpisode(episode, playback.time);
+  const at = new THREE.Vector3(...s.pos);
+  follow = mode !== "overview";
+  if (mode === "overview") {
+    // Frame the start, the targets and the obstacles together.
+    const box = new THREE.Box3().setFromPoints(
+      [episode.scene.start, ...episode.scene.targets, ...episode.scene.obstacles.map((o) => o.center)].map(
+        (q) => new THREE.Vector3(...q),
+      ),
+    );
+    const centre = box.getCenter(new THREE.Vector3());
+    const size = Math.max(box.getSize(new THREE.Vector3()).length(), 0.4);
+    stage.view(centre, new THREE.Vector3(0.6, 0.8, 1.0).multiplyScalar(size));
+    return;
+  }
+  const yaw = new THREE.Euler().setFromQuaternion(
+    new THREE.Quaternion(s.quat[1], s.quat[2], s.quat[3], s.quat[0]), "YZX",
+  ).y;
+  const offsets: Record<string, THREE.Vector3> = {
+    follow: new THREE.Vector3(0.18, 0.12, 0.3),
+    side: new THREE.Vector3(0, 0.02, 0.35),
+    top: new THREE.Vector3(0.0001, 0.4, 0),
+    behind: new THREE.Vector3(-0.35, 0.06, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw),
+  };
+  stage.view(at, offsets[mode]);
+}
 
-const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(1.5, 64), // the arena: 1.5 m around the centre
-  new THREE.MeshLambertMaterial({ color: 0xb7c9a8 }),
+stage.run((dt) => {
+  if (!episode || !playback) return;
+  const simDt = playback.advance(dt);
+  const s = sampleEpisode(episode, playback.time);
+  const cmd = decodeAction(s.action, p);
+  phase = (phase + 2 * Math.PI * cmd.freq * simDt) % (2 * Math.PI);
+  // Wingbeats per rendered frame: above about a tenth, the eye (and a camera) only sees a blur.
+  const beatsPerFrame = playback.playing ? cmd.freq * playback.speed * dt : 0;
+  const blur = THREE.MathUtils.clamp((beatsPerFrame - 0.08) / 0.25, 0, 1);
+
+  bird.setPose(s.pos, s.quat);
+  bird.setWings(phase, cmd, blur, damageAt(episode, playback.time));
+  bird.advanceModel(cmd.freq * simDt, blur);
+  const w = weight(p) * episode.conditions.mass_factor;
+  world.update(s.target, s.index, s.pos, s.wind, w, showWind);
+  if (follow) stage.follow(new THREE.Vector3(...s.pos));
+
+  const c = episode.conditions;
+  panel.update(episode, {
+    time: playback.time,
+    duration: duration(episode),
+    speed: playback.speed,
+    playing: playback.playing,
+    altitude: s.pos[1],
+    velocity: Math.hypot(...s.vel),
+    distance: s.distance,
+    thrustRatio: s.thrust / w,
+    hold: s.hold,
+    failed: c.failure_time !== null && playback.time >= c.failure_time,
+  });
+});
+
+// The 3D model (1.1 MB, plus its 0.5 MB specular map) arrives after the page. The bird
+// stays hidden until then, otherwise the drawn bird flashes for a few frames at every
+// reload. If the model fails, or takes more than 3 s (slow connection), the drawn bird flies.
+bird.root.visible = false;
+const showBird = () => (bird.root.visible = true);
+setTimeout(showBird, 3000);
+const modelFailed = () => {
+  showBird();
+  panel.modelReady(false);
+};
+new THREE.TextureLoader().load(
+  "models/hummingbird_specgloss.webp",
+  (specGloss) => {
+    specGloss.flipY = false; // glTF textures are stored the other way up from three.js's default
+    specGloss.wrapS = specGloss.wrapT = THREE.RepeatWrapping;
+    new GLTFLoader().load(
+      "models/hummingbird.glb",
+      (gltf) => {
+        bird.attachModel(gltf, specGloss, stage.sunDirection);
+        showBird();
+        panel.modelReady();
+      },
+      undefined,
+      modelFailed,
+    );
+  },
+  undefined,
+  modelFailed,
 );
-ground.rotation.x = -Math.PI / 2;
-scene.add(ground);
-const grid = new THREE.GridHelper(3, 30, 0x6b7f5e, 0x9fb294); // 10 cm squares
-grid.position.y = 0.001;
-scene.add(grid);
 
-const bird = new THREE.Group();
-const body = new THREE.Mesh(new THREE.SphereGeometry(p.r_bird, 24, 16), new THREE.MeshLambertMaterial({ color: 0x2e8b57 }));
-const beak = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.03, 12), new THREE.MeshLambertMaterial({ color: 0x333333 }));
-beak.rotation.z = -Math.PI / 2; // the cone points along +y by default; turn it to +x, the beak axis
-beak.position.x = p.r_bird + 0.012;
-bird.add(body, beak);
-scene.add(bird);
-
-const marker = new THREE.Mesh(new THREE.SphereGeometry(0.006, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd9480f }));
-marker.position.set(START[0], START[1], START[2]);
-scene.add(marker);
-
-// --- simulation --------------------------------------------------------------------------
-const dyn = new BirdDynamics(p);
-const action = hoverAction(p);
-let state: BirdState = newFlight();
-let restartAt: number | null = null;
-
-function newFlight(): BirdState {
-  return stateFromEuler(START, [0.05, 0.0, 0.0]); // a 5 cm/s push forward
-}
-
-const status = document.querySelector<HTMLDivElement>("#status")!;
-const intro =
-  `<b>Web setup OK</b> · three.js r${THREE.REVISION} · simulator loaded ` +
-  `(hover amplitude ${((hoverAmplitude(p) * 180) / Math.PI).toFixed(1)}°).<br>` +
-  `The bird gets the hover action and a 5 cm/s push, with no controller. Drag to orbit, scroll to zoom.`;
-
-// Fixed physics step with a time accumulator: each frame advances the simulation
-// by the real time elapsed, in steps of 1/240 s (at most 64 per frame).
-let last = performance.now();
-let accumulator = 0.0;
-
-function frame(now: number): void {
-  accumulator += Math.min((now - last) / 1000, 0.25);
-  last = now;
-  let steps = 0;
-  while (accumulator >= p.dt && steps < 64 && restartAt === null) {
-    [state] = dyn.step(state, action);
-    accumulator -= p.dt;
-    steps++;
-    const reason = checkLimits(state);
-    if (reason !== null) restartAt = now + 1000;
-    status.innerHTML = `${intro}<br>t = ${state.time.toFixed(2)} s${reason ? ` · <b>${reason.replaceAll("_", " ")}</b>` : ""}`;
-  }
-  if (restartAt !== null && now > restartAt) {
-    state = newFlight();
-    restartAt = null;
-    accumulator = 0.0;
-  }
-
-  bird.position.set(state.pos[0], state.pos[1], state.pos[2]);
-  const [w, x, y, z] = state.quat;
-  bird.quaternion.set(x, y, z, w); // three.js stores (x, y, z, w)
-
-  const { clientWidth: width, clientHeight: height } = canvas;
-  if (canvas.width !== Math.floor(width * renderer.getPixelRatio()) || canvas.height !== Math.floor(height * renderer.getPixelRatio())) {
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-  }
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
+fetch("episodes/index.json")
+  .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+  .then((index: { episodes: IndexEntry[] }) => panel.setIndex(index.episodes))
+  .catch(() =>
+    panel.message(
+      "No recorded episodes yet. Write some with<br><code>uv run python scripts/export_web.py episodes --policy pid --tasks hover goto</code>",
+    ),
+  );

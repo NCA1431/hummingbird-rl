@@ -5,36 +5,157 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hummingbird RL</title>
     <style>
+      :root {
+        --panel: rgba(255, 255, 255, 0.88);
+        --ink: #1d2733;
+        --muted: #5b6672;
+        --accent: #1d7a4c;
+        --line: #d5dbe1;
+      }
       html,
       body {
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #dfe9f3;
         font-family: system-ui, sans-serif;
+        color: var(--ink);
+        /* A deep enough sky for the bird's colours to stand out against it. */
+        background: linear-gradient(#6d8fb3 0%, #b3c7da 55%, #dde4d8 100%);
       }
       #view {
         display: block;
         width: 100%;
         height: 100%;
       }
-      #status {
+      .panel {
         position: absolute;
-        top: 12px;
         left: 12px;
-        max-width: min(560px, calc(100% - 24px));
+        right: 12px;
+        max-width: 760px;
         padding: 10px 14px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.85);
-        color: #1d2733;
-        font-size: 14px;
-        line-height: 1.45;
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      #hud {
+        top: 12px;
+      }
+      #live {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      #controls {
+        bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        align-items: center;
+      }
+      #controls .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+      }
+      select,
+      button {
+        font: inherit;
+        padding: 3px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: white;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      #time {
+        flex: 1;
+        min-width: 140px;
+        accent-color: var(--accent);
+      }
+      .label {
+        color: var(--muted);
+      }
+      code {
+        font-size: 12px;
+      }
+      #about {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        font-size: 11px;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        max-width: 230px;
+        text-align: right;
+      }
+      #credits {
+        display: none;
+        top: auto;
+        bottom: 150px;
+      }
+      #credits.open {
+        display: block;
+      }
+      #credits a {
+        color: var(--accent);
+      }
+      @media (max-width: 900px) {
+        #about {
+          display: none;
+        }
       }
     </style>
   </head>
   <body>
     <canvas id="view"></canvas>
-    <div id="status">Loading…</div>
+    <div id="hud" class="panel">
+      <div id="info">Loading…</div>
+      <div id="live"></div>
+    </div>
+    <div id="about">Hummingbird RL · recorded test episodes, replayed exactly as they were measured.</div>
+    <div id="credits" class="panel">
+      <b>Credits</b><br />
+      3D hummingbird: <a href="https://sketchfab.com/3d-models/animated-hovering-flying-hummingbird-loop-102884713a2742ce829e368d2a790c45" target="_blank" rel="noopener">“Animated Hovering Flying Hummingbird Loop”</a>
+      by LasquetiSpice, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.
+      Changes: textures resized and converted to WebP, unused animation and keyframes removed, rendered with our own shader; its wingbeat is replayed at the simulated frequency.<br />
+      Wing motion of the drawn bird: Song, Tobalske, Powers, Hedrick &amp; Luo (2016), <i>R. Soc. Open Sci.</i> 3:160230, data
+      <a href="https://doi.org/10.5061/dryad.8ch1b" target="_blank" rel="noopener">doi:10.5061/dryad.8ch1b</a>.<br />
+      Rendering: <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>.
+    </div>
+    <div id="controls" class="panel">
+      <div class="row">
+        <select id="task" aria-label="Task"></select>
+        <select id="policy" aria-label="Controller"></select>
+        <select id="episode" aria-label="Episode"></select>
+      </div>
+      <div class="row">
+        <button id="play">Pause</button>
+        <button id="restart">Restart</button>
+        <input id="time" type="range" min="0" max="1" step="0.0167" value="0" aria-label="Time" />
+        <span class="label">speed</span>
+        <span id="speeds" class="row" style="width: auto"></span>
+      </div>
+      <div class="row">
+        <span class="label">camera</span>
+        <button data-camera="follow">Follow</button>
+        <button data-camera="side">Side</button>
+        <button data-camera="top">Top</button>
+        <button data-camera="behind">Behind</button>
+        <button data-camera="overview">Overview</button>
+        <button id="scale">Bird ×1</button>
+        <button id="model" disabled>Drawn bird</button>
+        <label class="label"><input id="wind" type="checkbox" checked /> wind</label>
+        <button id="credits-button">Credits</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

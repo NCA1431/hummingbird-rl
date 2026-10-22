@@ -54,12 +54,27 @@ uv run python -c "from hummingbird_rl.envs import make_env; env = make_env('goto
 
 ## Web viewer
 
-Needs Node.js (LTS). The simulator is ported to TypeScript and checked against the Python one
-on recorded trajectories (`web/tests/golden/`, written by `scripts/export_web.py golden`).
+Needs Node.js (LTS). The viewer replays recorded test episodes with a drawn hummingbird whose
+wings follow measured wing kinematics; the simulator is also ported to TypeScript and checked
+against the Python one on recorded trajectories (`web/tests/golden/`).
 
 ```powershell
+uv run python scripts/export_web.py episodes --policy pid --tasks hover goto obstacles navigation
+uv run python scripts/export_web.py episodes --policy ppo_goto_normal_s1      # a trained agent, on its task
 cd web
-npm install             # once, and after any change to package.json
-npm test                # parity of the TypeScript simulator with the Python one
+npm ci                  # once, and after any change to package-lock.json
+npm test                # parity of the TypeScript simulator with the Python one, and the viewer's logic
 npm run dev             # local server, open the address it prints
 ```
+
+The site is published on GitHub Pages by `.github/workflows/deploy-web.yml` at every push that changes `web/`.
+
+## Credits
+
+- 3D hummingbird in the viewer: ["Animated Hovering Flying Hummingbird Loop"](https://sketchfab.com/3d-models/animated-hovering-flying-hummingbird-loop-102884713a2742ce829e368d2a790c45)
+  by LasquetiSpice, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: textures
+  resized and converted to WebP, unused animation and keyframes removed (`web/tools/shrink-model.mjs`), rendered
+  with our own shader (`web/src/view/feathers.ts`); its root motion is ignored and its wingbeat replayed at the simulated frequency.
+- Wing kinematics: Song, Tobalske, Powers, Hedrick & Luo (2016), *R. Soc. Open Sci.* 3:160230,
+  Dryad doi:10.5061/dryad.8ch1b.
+

@@ -1,0 +1,51 @@
+# Builds the web viewer and publishes it on GitHub Pages, at every push to main that changes web/.
+#
+# One-time setup on GitHub: Settings -> Pages -> Source: "GitHub Actions".
+# (GitHub Pages works for public repositories on a free account; for a private
+# repository it needs GitHub Pro, which the GitHub Student Developer Pack includes.)
+name: Deploy the web viewer
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/deploy-web.yml"]
+  workflow_dispatch: # a "Run workflow" button in the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test # the parity tests must pass before anything is published
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
