@@ -286,8 +286,9 @@ export class Panel {
     const which = ep.suite === "live" ? `live flight, seed ${ep.seed}` : `${ep.suite ?? ""} episode ${ep.seed}`;
     // Only what differs from the nominal bird is listed: a mass other than 1 and a wing weakened
     // from the start appear in randomised conditions, the sudden failure in its own regime.
-    // In % of this bird's weight (a heavier bird is pushed relatively less by the same wind).
-    const air = wind === 0 && c.gust_sigma === 0 ? "calm air" : `wind ${pct(wind)} of its weight, gusts ${pct(c.gust_sigma / weight)}`;
+    // In % of the normal bird's weight, the unit in which the conditions are drawn (up to 30%
+    // in randomised conditions), whatever the mass of this bird.
+    const air = wind === 0 && c.gust_sigma === 0 ? "calm air" : `wind ${pct(wind)} of the weight, gusts ${pct(c.gust_sigma / weight)}`;
     const mass = c.mass_factor !== 1 ? ` · mass ×${c.mass_factor.toFixed(2)}` : "";
     const weak = [0, 1]
       .filter((i) => c.damage[i] > 0)

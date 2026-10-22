@@ -46,7 +46,7 @@ function show(ep: Episode): void {
   playback.speed = keepSpeed;
   phase = 0.0;
   world.load(ep);
-  panel.showEpisode(ep, weight(p) * ep.conditions.mass_factor);
+  panel.showEpisode(ep, weight(p)); // conditions in % of the normal bird's weight, as they are drawn
   setCamera(eye ? "eye" : ep.task === "obstacles" || ep.task === "navigation" ? "overview" : "follow");
 }
 

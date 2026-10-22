@@ -153,6 +153,10 @@
       #legend.open {
         display: block;
       }
+      #legend {
+        max-height: 60vh;
+        overflow-y: auto;
+      }
       #legend ul {
         margin: 4px 0 0;
         padding-left: 18px;
@@ -199,6 +203,20 @@
         <li><b>Timeline</b>: red tick = sudden wing failure; hatched band = after the end of the episode
           (live mode only: shown, not counted).</li>
       </ul>
+      <b>Conditions</b> (Live mode menu; the recorded test episodes are in normal conditions, or sudden failure)
+      <ul>
+        <li><b>normal</b>: a light breeze (up to 5% of the bird's weight) with gusts of 2%, and small sensor
+          and actuator noise. What every agent was tested in.</li>
+        <li><b>randomised</b>: wind up to 30% of the weight, gusts up to 10%, a bird 25% lighter to 25% heavier,
+          and in 70% of the flights one wing weakened by up to 40% from the start. The agents marked
+          "randomised" were trained in these conditions.</li>
+        <li><b>sudden wing failure</b>: normal conditions, then one wing loses 40% of its force, at a random
+          moment between 1.5 and 3 s.</li>
+        <li><b>calm air</b>: no wind and no noise at all.</li>
+      </ul>
+      <b>Controllers</b>: PID and LQR are classical controllers designed by hand; the others are neural
+      networks trained by reinforcement learning, named algorithm · training conditions · training run
+      (e.g. "PPO · randomised · #1"). All of them see the same 48 numbers and nothing else.
     </div>
     <div id="credits" class="panel">
       <b>Credits</b><br />
