@@ -1,0 +1,55 @@
+# Third evaluation pass (Thursday noon), about 15 minutes with 7 at once:
+#
+#     uv run python scripts/launch.py configs/experiments/eval_extra2.yaml --parallel 7
+#
+# Two measurements were added to answer the questions raised by the first results:
+# - grid: how each failure happens. "Failures by drift" = still flying at the end but not on
+#   the target, as expected from a controller without integral action under a steady wind;
+#   the other failures are crashes, losses of control and exits from the arena;
+# - behaviour: does the bird end up FACING the target, and how much of the flight is head-first?
+#   ("turned" alone counted any heading change above 45°: the agents turned even for targets ahead.)
+# Only these two tests are run again; the other results stay as they are.
+script: scripts/evaluate.py
+jobs:
+  # Hover: the grid again, now with the way each failure happens
+  - --policy ppo_hover_normal_s1 --suites grid
+  - --policy ppo_hover_normal_s2 --suites grid
+  - --policy ppo_hover_normal_s3 --suites grid
+  - --policy sac_hover_normal_s1 --suites grid
+  - --policy sac_hover_normal_s2 --suites grid
+  - --policy sac_hover_normal_s3 --suites grid
+  - --policy td3_hover_normal_s1 --suites grid
+  - --policy td3_hover_normal_s2 --suites grid
+  - --policy td3_hover_normal_s3 --suites grid
+  - --policy ppo_hover_randomised_s1 --suites grid
+  - --policy ppo_hover_randomised_s2 --suites grid
+  - --policy ppo_hover_randomised_s3 --suites grid
+  - --policy ppo_hover_finetuned_s1 --suites grid
+  - --policy ppo_hover_finetuned_s2 --suites grid
+  - --policy ppo_hover_finetuned_s3 --suites grid
+  - --policy sac_hover_normal_s1 --which best --suites grid
+  - --policy sac_hover_normal_s2 --which best --suites grid
+  - --policy sac_hover_normal_s3 --which best --suites grid
+  - --policy td3_hover_normal_s1 --which best --suites grid
+  - --policy td3_hover_normal_s2 --which best --suites grid
+  - --policy td3_hover_normal_s3 --which best --suites grid
+  - --policy pid --tasks hover --suites grid
+  - --policy lqr --tasks hover --suites grid
+  # Go-to-point: the grid and the behaviour test (does the bird face its target?)
+  - --policy ppo_goto_normal_s1 --suites grid behaviour
+  - --policy ppo_goto_normal_s2 --suites grid behaviour
+  - --policy ppo_goto_normal_s3 --suites grid behaviour
+  - --policy sac_goto_normal_s1 --suites grid behaviour
+  - --policy sac_goto_normal_s2 --suites grid behaviour
+  - --policy sac_goto_normal_s3 --suites grid behaviour
+  - --policy td3_goto_normal_s1 --suites grid behaviour
+  - --policy td3_goto_normal_s2 --suites grid behaviour
+  - --policy td3_goto_normal_s3 --suites grid behaviour
+  - --policy ppo_goto_randomised_s1 --suites grid behaviour
+  - --policy ppo_goto_randomised_s2 --suites grid behaviour
+  - --policy ppo_goto_randomised_s3 --suites grid behaviour
+  - --policy ppo_goto_finetuned_s1 --suites grid behaviour
+  - --policy ppo_goto_finetuned_s2 --suites grid behaviour
+  - --policy ppo_goto_finetuned_s3 --suites grid behaviour
+  - --policy pid --tasks goto --suites grid behaviour
+  - --policy lqr --tasks goto --suites grid behaviour

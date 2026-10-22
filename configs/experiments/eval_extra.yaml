@@ -1,0 +1,39 @@
+# Second evaluation pass (Thursday late morning), about 10 minutes with 7 at once:
+#
+#     uv run python scripts/launch.py configs/experiments/eval_extra.yaml --parallel 7
+#
+# 1. SAC and TD3 ended their hover training worse than their best validation score
+#    (SAC 63% vs about 99%), so we also evaluate their best-validation models. The
+#    results go to results/eval/<run>_best/; the final models stay the headline numbers.
+# 2. The first recovery-time measure counted the first 15 decisions inside 3 cm after the
+#    failure, which a bird that drifts away slowly passes before it has even left (0.01 s
+#    for every PPO agent). The corrected measure is a settling time; the failure test is
+#    run again for every hover controller, and only that test is replaced.
+# No --wandb here: the complete results table goes to W&B once, at the end.
+script: scripts/evaluate.py
+jobs:
+  # 1. The best-validation models of SAC and TD3 on hover, which got worse at the end of training
+  - --policy sac_hover_normal_s1 --which best --suites test grid mass failure
+  - --policy sac_hover_normal_s2 --which best --suites test grid mass failure
+  - --policy sac_hover_normal_s3 --which best --suites test grid mass failure
+  - --policy td3_hover_normal_s1 --which best --suites test grid mass failure
+  - --policy td3_hover_normal_s2 --which best --suites test grid mass failure
+  - --policy td3_hover_normal_s3 --which best --suites test grid mass failure
+  # 2. The failure test again for every hover controller, with the corrected recovery time
+  - --policy pid --tasks hover --suites failure
+  - --policy lqr --tasks hover --suites failure
+  - --policy ppo_hover_normal_s1 --suites failure
+  - --policy ppo_hover_normal_s2 --suites failure
+  - --policy ppo_hover_normal_s3 --suites failure
+  - --policy sac_hover_normal_s1 --suites failure
+  - --policy sac_hover_normal_s2 --suites failure
+  - --policy sac_hover_normal_s3 --suites failure
+  - --policy td3_hover_normal_s1 --suites failure
+  - --policy td3_hover_normal_s2 --suites failure
+  - --policy td3_hover_normal_s3 --suites failure
+  - --policy ppo_hover_randomised_s1 --suites failure
+  - --policy ppo_hover_randomised_s2 --suites failure
+  - --policy ppo_hover_randomised_s3 --suites failure
+  - --policy ppo_hover_finetuned_s1 --suites failure
+  - --policy ppo_hover_finetuned_s2 --suites failure
+  - --policy ppo_hover_finetuned_s3 --suites failure

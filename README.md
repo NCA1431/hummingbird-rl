@@ -11,7 +11,7 @@ web viewer comes next.
 cd C:\Users\nca18\projects\hummingbird-rl
 uv sync                 # creates .venv with Python 3.12, installs PyTorch (CUDA) and everything else, writes uv.lock
 uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-uv run pytest           # 134 passed
+uv run pytest           # 135 passed
 ```
 
 `uv.lock` pins every version: commit it.

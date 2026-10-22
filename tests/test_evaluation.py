@@ -42,6 +42,17 @@ def test_recovery_time_on_a_made_up_flight():
     assert np.isnan(recovery_time(never))
 
 
+def test_recovery_time_waits_for_a_slow_drift():
+    """A bird still inside for 0.5 s after the failure, then pushed out until 2.0 s: 1.0 s to recover,
+    not 0 s (the bug of the first version, which stopped at the first 15 decisions inside)."""
+    t = np.arange(1, 241) / 60.0
+    d = np.where((t >= 1.5) & (t < 2.0), 0.05, 0.01)
+    result = {"trace": {"t": t, "distance": d}, "conditions": Conditions(failure_time=1.0)}
+    assert recovery_time(result) == pytest.approx(1.0, abs=1 / 60)
+    calm = {"trace": {"t": t, "distance": np.full_like(t, 0.01)}, "conditions": Conditions(failure_time=1.0)}
+    assert recovery_time(calm) == 0.0
+
+
 BEARINGS = [((1, 0, 0), 0.0), ((0, 0, -1), 90.0), ((0, 0, 1), -90.0), ((-1, 0, 0), 180.0)]
 
 
@@ -62,6 +73,7 @@ def test_grid_covers_every_cell():
     cells, summary = evaluate_grid(PIDController(), "hover", {}, n=1)
     assert len(cells) == len(GRID_WINDS) * len(GRID_DAMAGES)
     assert 0.0 <= summary["robust_area"] <= 1.0
+    assert all(0 <= c["failed_by_drift"] <= c["failed"] for c in cells)
 
 
 def test_behaviour_suite_on_the_pid():
@@ -70,6 +82,8 @@ def test_behaviour_suite_on_the_pid():
         evaluate_behaviour(PIDController(), "hover", {}, n=2)
     rows, summary = evaluate_behaviour(PIDController(), "goto", {}, n=20)
     assert summary["p_turn_target_behind"] == 0.0 and summary["p_backed_target_behind"] > 0.8
+    assert summary["p_faced_target_behind"] == 0.0 and summary["forward_target_behind"] < 0.2
+    assert all(abs(r["net_turn_deg"]) < 45.0 for r in rows)          # yaw is only damped: it never turns
 
 
 def test_failure_suite_refuses_go_to_point():

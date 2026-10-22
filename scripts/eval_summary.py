@@ -34,11 +34,15 @@ COLUMNS = [
     ("test", "end_loss_of_control", "lost ctrl", "pct"),
     ("grid", "robust_area", "robust", "{:.2f}"),
     ("grid", "robust_area_trained_range", "robust<=.3", "{:.2f}"),
+    ("grid", "failures_by_drift", "drift fails", "pct"),
     ("mass", "mean_success", "mass", "{:.2f}"),
     ("failure", "survival_rate", "survival", "pct"),
+    ("failure", "median_max_deviation_cm", "max dev cm", "{:.1f}"),
     ("failure", "median_recovery_s", "recov s", "{:.2f}"),
-    ("behaviour", "p_turn_target_behind", "turns", "pct"),
-    ("behaviour", "p_backed_target_behind", "backs up", "pct"),
+    ("behaviour", "p_turn_target_behind", "turns(behind)", "pct"),
+    ("behaviour", "p_faced_target_behind", "faces(behind)", "pct"),
+    ("behaviour", "forward_target_behind", "fwd(behind)", "pct"),
+    ("behaviour", "p_turn_target_ahead", "turns(ahead)", "pct"),
 ]
 
 

@@ -62,7 +62,14 @@ def evaluate_test(policy, task: str, env_kwargs: dict, n: int = 200) -> tuple[li
 
 
 def evaluate_grid(policy, task: str, env_kwargs: dict, n: int = 20) -> tuple[list[dict], dict]:
-    """One row per (wind, damage) cell. The "robust area" is the mean success over the whole grid."""
+    """One row per (wind, damage) cell. The "robust area" is the mean success over the whole grid.
+
+    We also want to know HOW the failures happen. A failure "by drift" is an episode
+    that reached the time limit without succeeding: the bird was still flying, just
+    not close enough to (or not still enough at) its target. The other failures are
+    crashes, losses of control and exits from the arena. A controller without integral
+    action is expected to fail by drift under a steady wind: it settles off the target.
+    """
     cells = []
     for i, wind in enumerate(GRID_WINDS):
         for j, damage in enumerate(GRID_DAMAGES):
@@ -70,11 +77,16 @@ def evaluate_grid(policy, task: str, env_kwargs: dict, n: int = 20) -> tuple[lis
             env = HummingbirdEnv(task, regime, **env_kwargs)
             seed0 = SEEDS["grid"] + 1000 * (i * len(GRID_DAMAGES) + j)
             rows = run_episodes(env, policy, range(seed0, seed0 + n))
+            failed = [r for r in rows if not r["success"]]
             cells.append({"wind": wind, "damage": damage, **_rate(rows),
-                          "mean_return": float(np.mean([r["return"] for r in rows]))})
+                          "mean_return": float(np.mean([r["return"] for r in rows])),
+                          "mean_distance_cm": 100.0 * float(np.nanmean([r["distance"] for r in rows])),
+                          "failed": len(failed), "failed_by_drift": sum(r["reason"] == "time_limit" for r in failed)})
     inside = [c["success_rate"] for c in cells if c["wind"] <= 0.3]      # the part covered by training
+    failed = sum(c["failed"] for c in cells)
     return cells, {"robust_area": float(np.mean([c["success_rate"] for c in cells])),
-                   "robust_area_trained_range": float(np.mean(inside))}
+                   "robust_area_trained_range": float(np.mean(inside)),
+                   "failures_by_drift": sum(c["failed_by_drift"] for c in cells) / failed if failed else float("nan")}
 
 
 def _with_mass(rng: np.random.Generator, p: BirdParams, mass_factor: float) -> Conditions:
@@ -94,15 +106,24 @@ def evaluate_mass(policy, task: str, env_kwargs: dict, n: int = 20) -> tuple[lis
 
 
 def recovery_time(result: dict) -> float:
-    """Seconds from the failure until the bird is back within the hold radius for a full hold
-    (15 decisions in a row); NaN if that never happens."""
+    """Seconds from the failure until the bird is back within the hold radius for good.
+
+    This is a settling time: we look for the LAST moment after the failure when
+    the bird was farther than 3 cm from its target, and the recovery ends just
+    after it. 0 if the bird never left the 3 cm ball; NaN if it is still outside,
+    or back for less than a full hold (15 decisions), when the episode ends.
+    (A first version counted the first 15 decisions inside after the failure,
+    which a bird drifting away slowly passes before it has even left: 0 s.)
+    """
     t, d = result["trace"]["t"], result["trace"]["distance"]
-    after = np.flatnonzero(t >= result["conditions"].failure_time)
-    inside = d[after] < HOLD_RADIUS
-    for k in range(len(after) - HOLD_STEPS + 1):
-        if inside[k:k + HOLD_STEPS].all():
-            return float(t[after[k]] - result["conditions"].failure_time)
-    return float("nan")
+    after = t >= result["conditions"].failure_time
+    outside = np.flatnonzero(after & (d >= HOLD_RADIUS))
+    if len(outside) == 0:
+        return 0.0
+    last = outside[-1]
+    if last >= len(t) - HOLD_STEPS:
+        return float("nan")
+    return float(t[last + 1] - result["conditions"].failure_time)
 
 
 def evaluate_failure(policy, task: str, env_kwargs: dict, n: int = 100) -> tuple[list[dict], dict]:
@@ -126,16 +147,25 @@ def evaluate_failure(policy, task: str, env_kwargs: dict, n: int = 100) -> tuple
     return rows, {**_rate(rows), "episodes_reaching_failure": len(hit),
                   "survival_rate": k / len(hit) if hit else float("nan"), "survival_low": low, "survival_high": high,
                   "recovered_fraction": len(times) / len(hit) if hit else float("nan"),
-                  "median_recovery_s": float(np.median(times)) if times else float("nan")}
+                  "median_recovery_s": float(np.median(times)) if times else float("nan"),
+                  "median_max_deviation_cm": float(np.median([r["max_distance_after_cm"] for r in hit]))
+                  if hit else float("nan")}
 
 
 def evaluate_behaviour(policy, task: str, env_kwargs: dict, n: int = 200) -> tuple[list[dict], dict]:
     """Go-to-point: for each episode, where the target was at the start and how the bird went there.
 
-    bearing   angle of the target seen from the bird at the start: 0° straight ahead,
-              +90° on its left, ±180° behind
-    turned    the heading changed by more than 45° during the flight
-    backed    most of the moving time was spent flying backwards (relative to the heading)
+    bearing    angle of the target seen from the bird at the start: 0° straight ahead,
+               +90° on its left, ±180° behind
+    turned     the heading changed by more than 45° at some point of the flight
+    net_turn   final heading minus initial heading, between -180° and 180° (same signs as the bearing)
+    faced      the bird ended up facing the direction the target was in: |net_turn - bearing| < 45°
+    forward    fraction of the moving time spent flying head-first
+    backed     most of the moving time was spent flying backwards (forward < 0.5)
+
+    "turned" alone can be misleading: a bird whose heading wanders by more than 45°
+    counts as turning even if it never faces its target. "faced" and "forward" say
+    whether the turn served to fly head-first towards the target.
     """
     if task not in SUITE_TASKS["behaviour"]:
         raise ValueError("the behaviour suite is defined for the go-to-point task")
@@ -145,19 +175,31 @@ def evaluate_behaviour(policy, task: str, env_kwargs: dict, n: int = 200) -> tup
     for r in results:
         yaw0 = r["start"].euler[0]
         rel = world_to_heading(r["scene"].targets[0] - r["start"].pos, yaw0)
+        bearing = bearing_deg(rel)
         tr = r["trace"]
         heading_change = float(np.degrees(np.ptp(np.unwrap(np.r_[yaw0, tr["yaw"]]))))
+        net_turn = float(np.degrees(_wrap(tr["yaw"][-1] - yaw0)))
         v_fwd = np.array([world_to_heading(v, y)[0] for v, y in zip(tr["vel"], tr["yaw"])])
         moving = np.linalg.norm(tr["vel"], axis=1) > 0.1
-        backed = bool(moving.any() and np.mean(v_fwd[moving] < 0) > 0.5)
-        rows.append({**_plain([r])[0], "bearing_deg": bearing_deg(rel), "target_distance": float(np.linalg.norm(rel)),
-                     "heading_change_deg": heading_change, "turned": heading_change > 45.0, "backed": backed,
+        forward = float(np.mean(v_fwd[moving] > 0)) if moving.any() else float("nan")
+        rows.append({**_plain([r])[0], "bearing_deg": bearing, "target_distance": float(np.linalg.norm(rel)),
+                     "heading_change_deg": heading_change, "net_turn_deg": net_turn,
+                     "turned": heading_change > 45.0,
+                     "faced": abs(np.degrees(_wrap(np.radians(net_turn - bearing)))) < 45.0,
+                     "forward": forward, "backed": bool(moving.any() and forward < 0.5),
                      "time_s": float(tr["t"][-1])})
     behind = [r for r in rows if abs(r["bearing_deg"]) > 90.0]
     ahead = [r for r in rows if abs(r["bearing_deg"]) <= 90.0]
     return rows, {**_rate(rows), "p_turn_target_behind": _mean(behind, "turned"),
+                  "p_faced_target_behind": _mean(behind, "faced"),
+                  "forward_target_behind": float(np.nanmean([r["forward"] for r in behind])) if behind else np.nan,
                   "p_backed_target_behind": _mean(behind, "backed"), "p_turn_target_ahead": _mean(ahead, "turned"),
                   "mean_time_s": _mean(rows, "time_s")}
+
+
+def _wrap(angle: float) -> float:
+    """An angle brought back to [-π, π)."""
+    return (angle + np.pi) % (2.0 * np.pi) - np.pi
 
 
 def bearing_deg(rel_heading: np.ndarray) -> float:
