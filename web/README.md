@@ -32,5 +32,7 @@ npm run build      # static site in dist/ (type check first)
   (instructions inside), and drawn by `src/view/feathers.ts`, a port of the earlier Panda3D viewer's shader.
 
 Controls: Space = play/pause, R = restart, N = new live flight; drag to orbit, scroll to zoom.
+The top panel and the controls fold to their essentials with their corner button (the top one
+starts folded on phones).
 Cameras: Follow, Side, Top, Behind, Bird's eye (first person at the bird's eye, along its heading,
 horizon kept level) and Overview.

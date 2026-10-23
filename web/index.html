@@ -177,11 +177,44 @@
           display: none;
         }
       }
+      /* The HUD and the controls fold to their essentials (a phone screen is small): the
+         fold button sits in the top-right corner, the parts marked "more" disappear. */
+      #hud,
+      #controls {
+        padding-right: 40px;
+      }
+      .fold {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        line-height: 1;
+        font-weight: bold;
+      }
+      .folded .more {
+        display: none !important;
+      }
+      @media (max-width: 600px) {
+        .panel {
+          left: 6px;
+          right: 6px;
+          padding: 6px 36px 6px 8px;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        select,
+        button {
+          padding: 2px 6px;
+        }
+      }
     </style>
   </head>
   <body>
     <canvas id="view"></canvas>
     <div id="hud" class="panel">
+      <button id="fold-hud" class="fold" title="Fold">−</button>
       <div id="info">Loading…</div>
       <div id="readout"></div>
     </div>
@@ -216,7 +249,9 @@
       </ul>
       <b>Controllers</b>: PID and LQR are classical controllers designed by hand; the others are neural
       networks trained by reinforcement learning, named algorithm · training conditions · training run
-      (e.g. "PPO · randomised · #1"). All of them see the same 48 numbers and nothing else.
+      (e.g. "PPO · randomised · #1"). All of them see the same 48 numbers, measured with noise: altitude, speed,
+      tilt and spin, their previous command, the next two targets and the five nearest obstacles. None is told
+      the wind, the bird's mass or a wing's damage.
     </div>
     <div id="credits" class="panel">
       <b>Credits</b><br />
@@ -228,7 +263,8 @@
       Rendering: <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>.
     </div>
     <div id="controls" class="panel">
-      <div class="row">
+      <button id="fold-controls" class="fold" title="Fold">−</button>
+      <div class="row more">
         <span class="seg">
           <button id="mode-recorded" class="on" title="Test episodes recorded in Python">Recorded</button>
           <button id="mode-live" title="New flights simulated in your browser">Live</button>
@@ -253,10 +289,10 @@
           <span id="after-band" class="after-band" hidden></span>
         </span>
         <span id="clock" class="label">0.00 / 0.00 s</span>
-        <span class="label">speed</span>
-        <span id="speeds" class="row" style="width: auto"></span>
+        <span class="label more">speed</span>
+        <span id="speeds" class="row more" style="width: auto"></span>
       </div>
-      <div class="row">
+      <div class="row more">
         <span class="label">camera</span>
         <button data-camera="follow">Follow</button>
         <button data-camera="side">Side</button>

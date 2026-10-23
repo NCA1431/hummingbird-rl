@@ -30,10 +30,12 @@ hummingbird_rl/
   export/       recorded episodes, policy networks and golden test files for the web viewer
 configs/algos/      hyperparameters of each algorithm
 configs/experiments/  lists of runs for scripts/launch.py
-scripts/    launch.py, evaluate.py, export_web.py, runs_summary.py, pid_baseline.py, benchmark_device.py
+scripts/    launch.py, evaluate.py, eval_summary.py, export_web.py, runs_summary.py, pid_baseline.py,
+            benchmark_device.py, extract_dryad.py
 tests/      one test file per module
 web/        the web viewer: Vite + TypeScript + three.js, with a TypeScript port of the simulator
-data/vanderbilt/  hummingbird wing kinematics (Song et al. 2016, Dryad doi:10.5061/dryad.8ch1b)
+data/vanderbilt/  hummingbird wing kinematics (Song et al. 2016, Dryad doi:10.5061/dryad.8ch1b),
+                  extracted from the dataset's MATLAB figures by scripts/extract_dryad.py
 ```
 
 ## Training

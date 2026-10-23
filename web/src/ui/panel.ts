@@ -171,6 +171,19 @@ export class Panel {
       model.textContent = on ? "3D model" : "Drawn bird";
       h.model(on);
     };
+    // Fold buttons. On a phone the HUD starts folded: the two panels would hide half the scene.
+    for (const [buttonId, panelId] of [["fold-hud", "hud"], ["fold-controls", "controls"]]) {
+      const button = $<HTMLButtonElement>(buttonId);
+      const box = $<HTMLDivElement>(panelId);
+      const fold = (folded: boolean) => {
+        box.classList.toggle("folded", folded);
+        button.textContent = folded ? "+" : "−";
+        button.title = folded ? "Show everything" : "Fold";
+      };
+      button.onclick = () => fold(!box.classList.contains("folded"));
+      if (panelId === "hud" && window.innerWidth < 600) fold(true);
+    }
+
     // Two small panels, one at a time, just above the controls (whose height depends on the
     // screen width): what the scene shows, and the credits.
     const controls = $<HTMLDivElement>("controls");
@@ -295,8 +308,8 @@ export class Panel {
       .map((i) => ` · ${i === 0 ? "left" : "right"} wing weakened by ${pct(c.damage[i])} from the start`)
       .join("");
     this.info.innerHTML =
-      `<b>${TASK_NAMES[ep.task] ?? ep.task}</b> · ${label(ep.policy ?? "?")} · ${which}<br>` +
-      `${air}${mass}${weak}${failure}`;
+      `<b>${TASK_NAMES[ep.task] ?? ep.task}</b> · ${label(ep.policy ?? "?")} · ${which}` +
+      `<span class="more"><br>${air}${mass}${weak}${failure}</span>`;
     this.slider.max = String(total);
     this.slider.step = "any"; // a flight can end between two decisions: the end must be reachable
     place(this.markFailure, c.failure_time !== null && c.failure_time < total ? c.failure_time / total : null);
@@ -314,11 +327,11 @@ export class Panel {
         (v.after ? " · <i>after the end of the episode: shown, not counted</i>" : "")
       : `flying${failure}`;
     this.readout.innerHTML =
-      `${status}<br>` +
+      `${status}<span class="more"><br>` +
       `altitude ${(100 * v.altitude).toFixed(1)} cm · speed ${(100 * v.velocity).toFixed(0)} cm/s · ` +
       `distance ${(100 * v.distance).toFixed(1)} cm · thrust ${v.thrustRatio.toFixed(2)} × weight` +
       (v.hold > 0 ? ` · holding ${Math.round(100 * v.hold)}%` : "") +
-      `<br>wings: left ${deg(v.wings[0])}°, right ${deg(v.wings[1])}° of half-stroke, ${v.wings[2].toFixed(0)} Hz`;
+      `<br>wings: left ${deg(v.wings[0])}°, right ${deg(v.wings[1])}° of half-stroke, ${v.wings[2].toFixed(0)} Hz</span>`;
   }
 
   /** Enables the model button once the 3D model has loaded (or says it could not be). */
