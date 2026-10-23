@@ -66,6 +66,7 @@ export class World {
   private readonly wind: THREE.ArrowHelper;
   private trail: THREE.Line | null = null;
   private others: THREE.Line[] = []; // trails of the sandbox's other birds
+  private showTrails = true;
   private readonly ghost = new THREE.Group();
 
   constructor() {
@@ -129,6 +130,7 @@ export class World {
     });
 
     this.trail = makeTrail(ep, trailColor);
+    this.trail.visible = this.showTrails;
     this.root.add(this.trail);
   }
 
@@ -137,9 +139,16 @@ export class World {
     for (const t of this.others) this.root.remove(t);
     this.others = others.map(({ ep, color }) => {
       const line = makeTrail(ep, color);
+      line.visible = this.showTrails;
       this.root.add(line);
       return line;
     });
+  }
+
+  /** The birds' paths shown or not. */
+  setTrails(on: boolean): void {
+    this.showTrails = on;
+    for (const t of [this.trail, ...this.others]) if (t) t.visible = on;
   }
 
   /** How much of each other trail is drawn (frames up to its index). */

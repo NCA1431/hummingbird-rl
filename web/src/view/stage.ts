@@ -63,6 +63,9 @@ export class Stage {
   }
 
   /** Calls `frame(realSeconds)` before every rendered frame. */
+  /** Called just before each render, once the camera is placed (the air's depth pass uses it). */
+  readonly beforeRender: (() => void)[] = [];
+
   run(frame: (dt: number) => void): void {
     const loop = (now: number) => {
       const dt = Math.min((now - this.last) / 1000, 0.1);
@@ -70,6 +73,7 @@ export class Stage {
       this.resize();
       frame(dt);
       if (!this.inEye) this.controls.update();
+      for (const f of this.beforeRender) f();
       this.renderer.render(this.scene, this.camera);
       requestAnimationFrame(loop);
     };

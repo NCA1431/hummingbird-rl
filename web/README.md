@@ -19,7 +19,12 @@ npm run build      # static site in dist/ (type check first)
   loss of control, a live flight goes on until the bird reaches the ground or the episode's time
   limit, with a grey trail, a hatched band on the timeline and a note in the HUD: shown, not counted.
 - `src/view/` — the stage (camera, lights, arena), the bird, its wing motion from measured
-  data (`wingData.json`, Song et al. 2016), targets, obstacles, trail and wind arrow.
+  data (`wingData.json`, Song et al. 2016), targets, obstacles, trail and wind arrow; `air.ts`, the
+  "air" menu: the air of `src/sim/fluid.ts` (Stam's Stable Fluids, ported from our C++ fluid
+  simulation: 40³ cells of 1 cm around the followed bird, pushed by the simulated thrust where each
+  wing is in its stroke, and by the wind), run in a worker (`fluidWorker.ts`, pictures in
+  `fluidView.ts`) and shown as smoke (ray-marched 3D texture), a laser sheet of tracer particles,
+  vortex tubes (Q-criterion surfaces), or the smoke coloured by speed, pressure or spin.
 - `src/ui/panel.ts` — controls (Recorded / Live / Sandbox) and head-up display; `src/ui/words.ts` — the
   names of tasks, controllers (a transfer or a fine-tuning is said as such) and endings; `src/ui/sandboxPanel.ts` and
   `src/modes/sandbox.ts` — the sandbox: targets, numbered waypoints and obstacles placed by clicking on the

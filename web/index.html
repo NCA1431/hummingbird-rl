@@ -29,6 +29,7 @@
       }
       .panel {
         position: absolute;
+        cursor: grab; /* panels can be dragged by an empty part (double click: back in place) */
         left: 12px;
         right: 12px;
         max-width: 860px;
@@ -38,6 +39,10 @@
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
         font-size: 13px;
         line-height: 1.5;
+      }
+      .panel.dragging {
+        cursor: grabbing;
+        user-select: none;
       }
       #hud {
         top: 12px;
@@ -140,6 +145,25 @@
         color: #b45309;
       }
       .sandbox-notes:empty {
+        display: none;
+      }
+      /* The key of the air's colours, next to its menu. */
+      #air-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      #air-key[hidden] {
+        display: none;
+      }
+      #air-key .bar {
+        display: inline-block;
+        width: 64px;
+        height: 9px;
+        border-radius: 3px;
+      }
+      #air-key .bar[hidden] {
         display: none;
       }
       /* Help that stays out of the way: a hint that can be closed, and an (i) per section. */
@@ -341,6 +365,7 @@
         <li><b>Sandbox</b>: you build the scene and set the conditions, and up to four controllers fly it
           together. Opened from a live flight, it starts from that flight.</li>
       </ul>
+      Every panel can be moved: drag it by an empty part; a double click puts it back.<br />
       <b>What you see</b>
       <ul>
         <li><span class="swatch" style="background: #f0a020"></span><b>Orange ball</b>: the target zone, 3 cm in radius.
@@ -354,6 +379,20 @@
         <li><b>Blue arrow</b> above the bird: the wind (50 cm = a wind as strong as the bird's weight). The wind
           is the same everywhere in the arena, so with several birds one arrow, above the bird followed, says it for all.</li>
         <li><b>Orange-red wing</b>: a wing that has lost force (fully coloured at 40%).</li>
+        <li><b>Air</b> (the "air" menu): a simulation of the air around the followed bird, in a 40 cm box that
+          follows it (1 cm cells; another bird inside the box moves its air too). The wings push the air down with
+          exactly the bird's simulated thrust, where each wing is in its stroke, and the wind blows through the box;
+          the air is computed as an incompressible fluid with Jos Stam's "Stable Fluids" method. Best in slow
+          motion (×1/16, Side camera).
+          <b>smoke</b>: smoke released around the bird and by its wings, carried by the air.
+          <b>laser sheet</b>: tracer particles in a thin slice facing you, as in a lab where fog is lit by a laser
+          sheet; each leaves a short streak along its motion, brighter when faster.
+          <b>vortex tubes</b>: the surfaces wrapping the air's vortices (where it spins more than it is sheared),
+          coloured by speed, as simulations of flapping flight show their wakes.
+          <b>speed</b>, <b>pressure</b> (blue below, red above the surrounding air), <b>spin</b>: the smoke
+          coloured by the air it is in; their range is shown next to the menu.
+          The air does not act back on the bird, and 1 cm cells are too coarse for the flow around the feathers:
+          what you see is the jet, its large vortices, the wind bending it, the ground spreading it.</li>
         <li><b>Grey ring</b> on the ground: the start point. <b>Green disc</b>: the arena, 1.5 m in radius and
           1.2 m high, with 10 cm squares.</li>
         <li><b>Timeline</b>: red tick = sudden wing failure; hatched band = after the end of the episode
@@ -429,6 +468,19 @@
         <button id="scale">Bird ×1</button>
         <button id="model" disabled>Drawn bird</button>
         <label class="label"><input id="wind" type="checkbox" checked /> wind</label>
+        <label class="label" title="The path flown by each bird"><input id="trails" type="checkbox" checked /> path</label>
+        <label class="label" title="A smoke simulation of the air around the followed bird (see the Legend)">air
+          <select id="air" aria-label="Air">
+            <option value="off">off</option>
+            <option value="smoke">smoke</option>
+            <option value="sheet">laser sheet</option>
+            <option value="tubes">vortex tubes</option>
+            <option value="speed">speed</option>
+            <option value="pressure">pressure</option>
+            <option value="spin">spin</option>
+          </select></label>
+        <label id="air-box-label" class="label" title="The edges of the 40 cm box of air simulated around the followed bird" hidden><input id="air-box" type="checkbox" /> box</label>
+        <span id="air-key" class="label" hidden><span class="lo"></span><span class="bar"></span><span class="hi"></span></span>
         <button id="legend-button">Legend</button>
         <button id="credits-button">Credits</button>
       </div>

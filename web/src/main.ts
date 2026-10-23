@@ -26,6 +26,7 @@ import { type Episode, type IndexEntry, Playback, damageAt, duration, endTime, s
 import { decodeAction } from "./sim/aero";
 import { DEFAULT_PARAMS, weight } from "./sim/params";
 import { type CameraMode, type LiveChoice, Panel, type Pilot, type SandboxChoice } from "./ui/panel";
+import { Air, type AirBird, type AirMode } from "./view/air";
 import { BIRD_COLORS, Bird } from "./view/bird";
 import { Stage } from "./view/stage";
 import { type Pick, World } from "./view/world";
@@ -35,7 +36,9 @@ const stage = new Stage(document.querySelector<HTMLCanvasElement>("#view")!);
 // Four birds, one per colour. Outside the sandbox only the first one flies.
 const birds = BIRD_COLORS.map((color) => new Bird(p, color));
 const world = new World();
-stage.scene.add(...birds.map((b) => b.root), world.root);
+const air = new Air(p); // the smoke simulation around the followed bird ("air" menu)
+stage.scene.add(...birds.map((b) => b.root), world.root, air.root);
+stage.beforeRender.push(() => air.depthPass(stage.renderer, stage.scene, stage.camera));
 
 let episodes: Episode[] = []; // one per bird on screen, in the order of their colours
 let followed = 0; // the bird the camera and the HUD follow
@@ -59,6 +62,7 @@ function show(eps: Episode[], resetCamera = true, followIndex = 0): void {
   playback = new Playback(eps[followed], Math.max(...eps.map(duration)));
   playback.speed = keepSpeed;
   phases = eps.map(() => 0.0);
+  air.reset();
   loadWorld();
   refreshBirds();
   if (resetCamera) setCamera(eye ? "eye" : episode!.task === "obstacles" || episode!.task === "navigation" ? "overview" : "follow");
@@ -72,6 +76,7 @@ function loadWorld(): void {
   episode = episodes[followed];
   const several = episodes.length > 1;
   world.load(episode, several ? BIRD_COLORS[followed] : null);
+  air.setObstacles(episode.scene.obstacles); // the air flows around them
   world.setOthers(episodes.map((ep, i) => ({ ep, color: BIRD_COLORS[i] })).filter((_, i) => i !== followed));
   // Conditions in % of the normal bird's weight; the timeline as long as the longest flight.
   panel.showEpisode(episode, weight(p), playback!.end, episodes.length, followed);
@@ -84,6 +89,7 @@ function refreshBirds(): void {
     b.showModel(panel.mode === "sandbox" ? (panel.sandbox.slots[i]?.model ?? false) : modelOn);
     b.setHidden(eye && i === followed); // the bird's-eye camera is inside the followed bird
   });
+
 }
 
 // Networks are downloaded once (about 0.4 MB each) and kept.
@@ -153,15 +159,26 @@ const panel = new Panel({
     if (!playback.playing && playback.time >= playback.end) playback.restart();
     else playback.playing = !playback.playing;
   },
-  restart: () => playback?.restart(),
+  restart() {
+    playback?.restart();
+    air.reset(); // the air shed later in the flight does not belong at its start
+  },
   speed(s: number) {
     keepSpeed = s;
     if (playback) playback.speed = s;
   },
-  seek: (t: number) => playback?.seek(t),
+  seek(t: number) {
+    playback?.seek(t);
+    air.reset();
+  },
   camera: (mode: CameraMode) => setCamera(mode),
-  scale: (s: number) => birds.forEach((b) => b.setScale(s)),
+  scale(s: number) {
+    birds.forEach((b) => b.setScale(s));
+  },
   wind: (show: boolean) => (showWind = show),
+  air: (mode: AirMode) => air.setMode(mode),
+  airBox: (on: boolean) => air.showBox(on),
+  trails: (on: boolean) => world.setTrails(on),
   model(on: boolean) {
     modelOn = on;
     refreshBirds();
@@ -180,6 +197,7 @@ function setCamera(mode: CameraMode): void {
   const s = sampleEpisode(episode, playback.time);
   const at = new THREE.Vector3(...s.pos);
   eye = mode === "eye";
+  panel.cameraMode(mode);
   birds.forEach((b, i) => b.setHidden(eye && i === followed));
   follow = mode !== "overview" && !eye;
   if (eye) return; // placed at every frame, in the loop below
@@ -229,7 +247,7 @@ stage.run((dt) => {
     birds[i].setPose(s.pos, s.quat);
     birds[i].setWings(phases[i], cmd, blur, damageAt(ep, t));
     birds[i].advanceModel(cmd.freq * dtWings);
-    return { s, cmd };
+    return { s, cmd, still, damage: damageAt(ep, t), phase: phases[i] };
   });
   const { s, cmd } = samples[followed];
 
@@ -237,6 +255,22 @@ stage.run((dt) => {
   // gusts vary in time, not in space), so every bird feels the one it shows.
   const w = weight(p) * episode.conditions.mass_factor;
   world.update(s.target, s.index, s.pos, s.wind, w, showWind);
+  air.update(
+    simDt,
+    s.pos,
+    s.wind,
+    samples.map((x): AirBird => ({
+      pos: x.s.pos,
+      quat: x.s.quat,
+      thrust: x.s.thrust,
+      cmd: x.cmd,
+      damage: x.damage,
+      phase: x.phase,
+      flying: !x.still,
+    })),
+    stage.camera.position.toArray() as [number, number, number],
+  );
+  panel.airKey(air.current, air.scales);
   world.updateOthers(samples.filter((_, i) => i !== followed).map((x) => x.s.index));
   if (follow) stage.follow(new THREE.Vector3(...s.pos));
   if (eye) {

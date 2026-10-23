@@ -22,6 +22,8 @@ import type { Episode, IndexEntry } from "../modes/watch";
 import type { Conditions, RegimeName } from "../sim/disturbances";
 import { TASKS } from "../sim/tasks";
 import type { Scene } from "../sim/world";
+import type { FluidScales } from "../sim/fluid";
+import { type AirMode, paletteCss } from "../view/air";
 import { BIRD_COLORS } from "../view/bird";
 import { type BirdSlot, SandboxPanel } from "./sandboxPanel";
 import { TASK_NAMES, ending, label } from "./words";
@@ -82,6 +84,9 @@ export interface PanelHandlers {
   camera(mode: CameraMode): void;
   scale(s: number): void;
   wind(show: boolean): void;
+  air(mode: AirMode): void;
+  airBox(on: boolean): void;
+  trails(on: boolean): void;
   model(on: boolean): void;
 }
 
@@ -184,6 +189,15 @@ export class Panel {
     };
     const wind = $<HTMLInputElement>("wind");
     wind.onchange = () => h.wind(wind.checked);
+    const airMenu = $<HTMLSelectElement>("air");
+    const airBox = $<HTMLInputElement>("air-box");
+    airMenu.onchange = () => {
+      h.air(airMenu.value as AirMode);
+      $<HTMLLabelElement>("air-box-label").hidden = airMenu.value === "off";
+    };
+    airBox.onchange = () => h.airBox(airBox.checked);
+    const trails = $<HTMLInputElement>("trails");
+    trails.onchange = () => h.trails(trails.checked);
     const model = $<HTMLButtonElement>("model");
     model.onclick = () => {
       const on = model.dataset.on !== "1";
@@ -211,10 +225,11 @@ export class Panel {
     ["legend-button", "credits-button"].forEach((id, i) => {
       $<HTMLButtonElement>(id).onclick = () => {
         popups[1 - i].classList.remove("open");
-        popups[i].style.bottom = `${controls.offsetHeight + 20}px`;
+        if (!popups[i].dataset.moved) popups[i].style.bottom = `${controls.offsetHeight + 20}px`;
         popups[i].classList.toggle("open");
       };
     });
+    for (const id of ["hud", "controls", "sandbox", "legend", "credits"]) draggable($<HTMLDivElement>(id));
 
     window.addEventListener("keydown", (e) => {
       if (e.target instanceof HTMLSelectElement) return;
@@ -401,6 +416,43 @@ export class Panel {
       `<br>wings: left ${deg(v.wings[0])}°, right ${deg(v.wings[1])}° of half-stroke, ${v.wings[2].toFixed(0)} Hz</span>`;
   }
 
+  private keyShown = "";
+  private keyTime = 0;
+
+  /**
+   * The key of the air's colours, next to its menu: the palette and its current range (the
+   * scales adapt to the flow in view). Its numbers are refreshed four times a second, to be read.
+   */
+  airKey(mode: AirMode, s: FluidScales): void {
+    const key = $<HTMLSpanElement>("air-key");
+    const now = performance.now();
+    if (mode === this.keyShown && now - this.keyTime < 250) return;
+    this.keyShown = mode;
+    this.keyTime = now;
+    key.hidden = mode === "off";
+    if (mode === "off") return;
+    const fmt = (x: number) => (x >= 10 ? x.toFixed(0) : x >= 1 ? x.toFixed(1) : x.toPrecision(2));
+    const range: Record<string, [string, string]> = {
+      smoke: ["smoke from the wings", ""],
+      sheet: [`tracers in a slice; brighter = faster, up to ${fmt(s.speed)} m/s`, ""],
+      tubes: ["vortices, coloured by speed: 0", `${fmt(s.speed)} m/s`],
+      speed: ["0", `${fmt(s.speed)} m/s`],
+      pressure: [`−${fmt(s.pressure)}`, `+${fmt(s.pressure)} Pa`],
+      spin: ["0", `${fmt(s.vortices)} /s`],
+    };
+    const bar = key.querySelector<HTMLSpanElement>(".bar")!;
+    const [lo, hi] = range[mode] ?? ["", ""];
+    bar.style.background = paletteCss(mode);
+    bar.hidden = mode === "smoke" || mode === "sheet";
+    key.querySelector<HTMLSpanElement>(".lo")!.textContent = lo;
+    key.querySelector<HTMLSpanElement>(".hi")!.textContent = hi;
+  }
+
+  /** Marks the camera button in use. */
+  cameraMode(mode: CameraMode): void {
+    document.querySelectorAll<HTMLButtonElement>("[data-camera]").forEach((b) => b.classList.toggle("on", b.dataset.camera === mode));
+  }
+
   /** Enables the model button once the 3D model has loaded (or says it could not be). */
   modelReady(ok = true): void {
     const model = $<HTMLButtonElement>("model");
@@ -419,6 +471,46 @@ const deg = (rad: number) => ((rad * 180) / Math.PI).toFixed(0);
 
 /** A dot in the colour of the sandbox's bird `i`. */
 const dot = (i: number) => `<span style="color:#${BIRD_COLORS[i].toString(16).padStart(6, "0")}">●</span>`;
+
+/**
+ * Lets a panel be moved by dragging an empty part of it (not a button, a menu or a slider, which
+ * keep their own use); a double click on an empty part puts it back in its place. The panel is
+ * kept on screen. While dragged it gets a fixed width, since its place was set by both its sides.
+ */
+function draggable(box: HTMLElement): void {
+  const controls = "button, select, input, a, label, option, textarea";
+  box.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest(controls)) return;
+    e.preventDefault(); // no text selection while dragging
+    const r = box.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    const cs = getComputedStyle(box); // the width set is the content's: without the padding
+    const width = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    Object.assign(box.style, { width: `${width}px`, maxWidth: "none", left: `${r.left}px`, top: `${r.top}px`, right: "auto", bottom: "auto" });
+    box.classList.add("dragging");
+    box.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      box.style.left = `${Math.min(Math.max(m.clientX - dx, 0), window.innerWidth - 60)}px`;
+      box.style.top = `${Math.min(Math.max(m.clientY - dy, 0), window.innerHeight - 40)}px`;
+    };
+    const end = () => {
+      box.classList.remove("dragging");
+      box.dataset.moved = "1";
+      box.removeEventListener("pointermove", move);
+      box.removeEventListener("pointerup", end);
+      box.removeEventListener("pointercancel", end);
+    };
+    box.addEventListener("pointermove", move);
+    box.addEventListener("pointerup", end);
+    box.addEventListener("pointercancel", end);
+  });
+  box.addEventListener("dblclick", (e) => {
+    if ((e.target as HTMLElement).closest(controls)) return;
+    for (const p of ["width", "max-width", "left", "top", "right", "bottom"]) box.style.removeProperty(p);
+    delete box.dataset.moved;
+  });
+}
 
 /** Puts a timeline mark (or the start of the band) at fraction `f` of the slider's length, or hides it (null). */
 function place(mark: HTMLElement, f: number | null): void {
