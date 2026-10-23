@@ -21,7 +21,7 @@ import { LQRController } from "./control/lqr";
 import { type MlpPolicy, type PolicyEntry, loadPolicy } from "./control/mlp";
 import { PIDController } from "./control/pid";
 import { simulateEpisode } from "./modes/live";
-import { inside, waitingEpisode } from "./modes/sandbox";
+import { canErase, inside, waitingEpisode } from "./modes/sandbox";
 import { type Episode, type IndexEntry, Playback, damageAt, duration, endTime, sampleEpisode } from "./modes/watch";
 import { decodeAction } from "./sim/aero";
 import { DEFAULT_PARAMS, weight } from "./sim/params";
@@ -285,14 +285,16 @@ function groundAt(e: PointerEvent): THREE.Vector3 | null {
 }
 
 /**
- * The target or obstacle under the pointer: the nearest one the ray passes within 2 cm of.
- * The margin matters: a target is a ball of 3 cm, a few pixels wide in the overview.
+ * What Erase would remove under the pointer: the nearest target or obstacle the ray passes within
+ * 2 cm of, among those the task lets it remove (the one target of go-to-point and obstacles is
+ * moved, not removed). The margin matters: a target is a ball of 3 cm, a few pixels wide in the overview.
  */
 function pickAt(e: PointerEvent): Pick | null {
   const ray = rayAt(e);
   let best: Pick | null = null;
   let nearest = Infinity;
   for (const o of world.pickables) {
+    if (!canErase(panel.sandbox.task, (o.userData.pick as Pick).kind)) continue;
     const geometry = (o as THREE.Mesh).geometry;
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
     if (ray.distanceToPoint(o.position) > geometry.boundingSphere!.radius + 0.02) continue;

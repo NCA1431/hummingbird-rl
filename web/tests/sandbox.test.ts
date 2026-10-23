@@ -11,6 +11,7 @@ import {
   DEFAULT_SETTINGS,
   MAX_WAYPOINTS,
   type SandboxSettings,
+  canErase,
   clearScene,
   erase,
   inside,
@@ -80,6 +81,14 @@ describe("placing", () => {
     expect(toolsFor("navigation", scene).target).toBe(false);
     expect(toolsFor("navigation", erase(scene, "target", 0)).target).toBe(true);
     expect(toolsFor("goto", scene).target).toBe(true); // go-to-point: the click moves its one target
+  });
+
+  it("tools per task: one target is moved, never erased; only two tasks have obstacles", () => {
+    expect(toolsFor("hover")).toEqual({ target: false, obstacle: false, erase: false, clear: false });
+    expect(toolsFor("goto")).toEqual({ target: true, obstacle: false, erase: false, clear: false });
+    expect(toolsFor("obstacles")).toEqual({ target: true, obstacle: true, erase: true, clear: true });
+    expect([canErase("obstacles", "target"), canErase("obstacles", "obstacle")]).toEqual([false, true]);
+    expect([canErase("navigation", "target"), canErase("goto", "target")]).toEqual([true, false]);
   });
 
   it("obstacles only where the task has them, and nothing outside the arena", () => {

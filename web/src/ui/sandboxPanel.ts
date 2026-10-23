@@ -17,6 +17,7 @@ import {
   MAX_WAYPOINTS,
   type SandboxSettings,
   type Tool,
+  canErase,
   clearScene,
   erase,
   place,
@@ -58,6 +59,35 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string,
 
 const css = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
 
+/**
+ * What the Scene section says, task by task: what can be placed there, and how many. One text
+ * for all tasks read as if every task had a course of waypoints.
+ */
+function sceneHelp(task: string): string {
+  const see = "The see-through ball shows where the next one goes, and how high (the height slider).";
+  const nearest = "The controllers only see the 5 nearest obstacles, but the bird can hit any of them.";
+  switch (task) {
+    case "hover":
+      return "Hover & recover has nothing to place: the target is the start point (the grey ring), " +
+        "where the bird is pushed at the start and must come back. Set the wind and the bird below.";
+    case "goto":
+      return `Go-to-point has one target and no obstacles. Target, then a click on the ground, moves it. ${see}`;
+    case "obstacles":
+      return "One target, and as many obstacles as you like. Target moves the target, Obstacle adds a sphere " +
+        `(its size: the obstacle size slider), Erase removes the obstacle clicked, Clear removes them all. ${see} ${nearest}`;
+    default:
+      return `A course of up to ${MAX_WAYPOINTS} waypoints, flown in order (their numbers), among obstacles. ` +
+        "Target adds the next waypoint, Obstacle adds a sphere, Erase removes the waypoint or obstacle clicked, " +
+        `Clear removes them all to build a course from scratch. ${see} ${nearest}`;
+  }
+}
+
+/** Changes the explanation of a section made by `section`. */
+function setHelp(box: HTMLDivElement, help: string): void {
+  box.querySelector<HTMLButtonElement>(".info")!.title = help;
+  box.querySelector<HTMLDivElement>(".help")!.textContent = help;
+}
+
 /** A section title with an (i): its explanation shows on hover, and stays open under the title once clicked. */
 function section(title: string, help: string): HTMLDivElement {
   const box = el("div");
@@ -86,6 +116,11 @@ export class SandboxPanel {
   private controllers: [string, string][] = [["pid", "PID"], ["lqr", "LQR"]]; // (value, label)
   private readonly birdsBox: HTMLDivElement;
   private readonly toolButtons: Record<"target" | "obstacle" | "erase", HTMLButtonElement>;
+  private readonly clearButton: HTMLButtonElement;
+  private readonly randomButton: HTMLButtonElement;
+  private readonly sceneSection: HTMLDivElement;
+  private readonly heightRow: HTMLLabelElement;
+  private readonly sizeRow: HTMLLabelElement;
   private readonly notes: HTMLDivElement;
   private readonly sliders: (() => void)[] = []; // refreshers, after the settings change from outside
 
@@ -115,29 +150,20 @@ export class SandboxPanel {
       body.append(hint);
     }
 
-    // Scene.
-    body.append(
-      section(
-        "Scene",
-        "Target: click on the ground to place the target (navigation: the next waypoint, numbered). " +
-          `Obstacle: click to place a sphere. Erase: click a target or an obstacle to remove it. ` +
-          `The see-through ball shows where and how high the next one goes. A course has ${MAX_WAYPOINTS} waypoints ` +
-          "at most; the controllers see the 5 nearest obstacles (the bird can hit any of them).",
-      ),
-    );
+    // Scene. Its explanation and the tools' tooltips depend on the task (updateTools).
+    this.sceneSection = section("Scene", sceneHelp(this.task));
+    body.append(this.sceneSection);
     const tools = el("div", { class: "seg" });
-    this.toolButtons = {
-      target: el("button", { title: "Place the target (navigation: add the next waypoint)" }, "Target"),
-      obstacle: el("button", { title: "Place an obstacle" }, "Obstacle"),
-      erase: el("button", { title: "Click a target or an obstacle to remove it" }, "Erase"),
-    };
+    this.toolButtons = { target: el("button", {}, "Target"), obstacle: el("button", {}, "Obstacle"), erase: el("button", {}, "Erase") };
     for (const t of ["target", "obstacle", "erase"] as const) this.toolButtons[t].onclick = () => this.setTool(this.tool === t ? null : t);
-    const clear = el("button", { title: "Remove the obstacles (and the waypoints in navigation)" }, "Clear");
+    const clear = el("button", {}, "Clear");
+    this.clearButton = clear;
     clear.onclick = () => {
       this.scene = clearScene(this.scene, this.task);
       this.h.changed(false);
     };
-    const random = el("button", { title: "A new random scene for this task" }, "Random scene");
+    const random = el("button", {}, "Random scene");
+    this.randomButton = random;
     random.onclick = () => {
       this.scene = sampleScene(this.task, new Rng(newSeed()), p.r_bird);
       this.h.changed(true);
@@ -147,8 +173,8 @@ export class SandboxPanel {
     edits.append(clear, random);
     body.append(tools, edits);
     const cm = (v: number) => `${Math.round(100 * v)} cm`;
-    this.slider(body, "height", 0.1, 1.0, 0.01, () => this.height, (v) => (this.height = v), cm, "height of the next target or obstacle", false);
-    this.slider(body, "obstacle size", 0.03, 0.15, 0.005, () => this.radius, (v) => (this.radius = v), (v) => `r ${cm(v)}`, "radius of the next obstacle", false);
+    this.heightRow = this.slider(body, "height", 0.1, 1.0, 0.01, () => this.height, (v) => (this.height = v), cm, "height of the next target or obstacle", false);
+    this.sizeRow = this.slider(body, "obstacle size", 0.03, 0.15, 0.005, () => this.radius, (v) => (this.radius = v), (v) => `r ${cm(v)}`, "radius of the next obstacle", false);
     // What is wrong with the scene (or full), right under the tools that can change it.
     this.notes = el("div", { class: "label sandbox-notes" });
     body.append(this.notes);
@@ -248,7 +274,7 @@ export class SandboxPanel {
     show: (v: number) => string,
     tip = "",
     fly = true,
-  ): void {
+  ): HTMLLabelElement {
     const row = el("label", { class: "slider", title: tip });
     const input = el("input", { type: "range", min: String(min), max: String(max), step: String(step) });
     const value = el("span", { class: "value" });
@@ -263,6 +289,7 @@ export class SandboxPanel {
       input.value = String(get());
       value.textContent = show(get());
     });
+    return row;
   }
 
   /** One row per bird: colour, controller, look, followed by the camera, remove. */
@@ -332,12 +359,33 @@ export class SandboxPanel {
    * them (its preview with it): e.g. Target once a navigation course has all its waypoints.
    */
   private updateTools(): void {
-    const tools = toolsFor(this.task, this.scene);
+    const task = this.task;
+    const tools = toolsFor(task, this.scene);
     for (const t of ["target", "obstacle", "erase"] as const) this.toolButtons[t].disabled = !tools[t];
-    const full = this.task === "navigation" && !tools.target;
-    this.toolButtons.target.title = full
-      ? `A course has ${MAX_WAYPOINTS} waypoints at most: Erase one to place another`
-      : "Place the target (navigation: add the next waypoint)";
+    this.clearButton.disabled = !tools.clear;
+    const nav = task === "navigation";
+    const b = this.toolButtons;
+    b.target.title =
+      task === "hover"
+        ? "Hover has no target to place: it is the start point"
+        : !nav
+          ? "Move the target: click on the ground"
+          : tools.target
+            ? "Add the next waypoint: click on the ground"
+            : `A course has ${MAX_WAYPOINTS} waypoints at most: Erase one to place another`;
+    b.obstacle.title = tools.obstacle ? "Add an obstacle: click on the ground" : "No obstacles in this task";
+    b.erase.title = !tools.erase
+      ? "Nothing to erase in this task (Target moves the target)"
+      : nav
+        ? "Click a waypoint or an obstacle to remove it"
+        : "Click an obstacle to remove it (Target moves the target)";
+    this.randomButton.disabled = task === "hover";
+    this.randomButton.title = task === "hover" ? "Hover always has the same scene" : "A new random scene for this task";
+    this.clearButton.title = !tools.clear ? "Nothing to clear in this task" : nav ? "Remove all the waypoints and obstacles" : "Remove all the obstacles";
+    setHelp(this.sceneSection, sceneHelp(task));
+    // Only the sliders that act on something placed in this task.
+    this.heightRow.style.display = task === "hover" ? "none" : "";
+    this.sizeRow.style.display = tools.obstacle ? "" : "none";
     if (this.tool && !tools[this.tool]) this.setTool(null);
   }
 
@@ -375,7 +423,7 @@ export class SandboxPanel {
 
   /** A click on a target or an obstacle with the Erase tool. */
   eraseItem(kind: "target" | "obstacle", index: number): void {
-    if (this.tool !== "erase") return;
+    if (this.tool !== "erase" || !canErase(this.task, kind)) return;
     this.scene = erase(this.scene, kind, index);
     this.h.changed(false);
   }

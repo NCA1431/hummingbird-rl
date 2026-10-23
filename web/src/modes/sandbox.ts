@@ -63,13 +63,23 @@ export function sandboxConditions(s: SandboxSettings, p: BirdParams): Conditions
 export type Tool = "target" | "obstacle" | "erase" | null;
 
 /**
- * Which tools make sense for a task: hover's target is the start point, only two tasks have
- * obstacles. Given the scene, also whether a tool can still do something now: a navigation
- * course holds MAX_WAYPOINTS waypoints at most.
+ * Which tools make sense for a task: hover's target is the start point, go-to-point and
+ * obstacles have one target (moved, never removed), only obstacles and navigation have
+ * obstacles to erase or clear. Given the scene, also whether a tool can still do something
+ * now: a navigation course holds MAX_WAYPOINTS waypoints at most.
  */
-export function toolsFor(task: string, scene: Scene | null = null): { target: boolean; obstacle: boolean; erase: boolean } {
+export function toolsFor(
+  task: string,
+  scene: Scene | null = null,
+): { target: boolean; obstacle: boolean; erase: boolean; clear: boolean } {
   const full = task === "navigation" && scene !== null && scene.targets.length >= MAX_WAYPOINTS;
-  return { target: task !== "hover" && !full, obstacle: task === "obstacles" || task === "navigation", erase: task !== "hover" };
+  const obstacles = task === "obstacles" || task === "navigation";
+  return { target: task !== "hover" && !full, obstacle: obstacles, erase: obstacles, clear: obstacles };
+}
+
+/** What Erase can remove: obstacles, and the waypoints of a navigation course. */
+export function canErase(task: string, kind: "target" | "obstacle"): boolean {
+  return kind === "obstacle" ? task === "obstacles" || task === "navigation" : task === "navigation";
 }
 
 /** Keeps a point inside the arena, horizontally (also where the preview of the next placement is drawn). */

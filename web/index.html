@@ -331,6 +331,16 @@
       <div class="sandbox-body more"></div>
     </div>
     <div id="legend" class="panel">
+      <b>Three modes</b>
+      <ul>
+        <li><b>Recorded</b>: the test episodes measured in Python, replayed frame by frame. Same seeds, same
+          simulator: each one is one of the episodes behind the results.</li>
+        <li><b>Live</b>: a new random situation at each "New flight", drawn like the training and test ones
+          (conditions menu), flown in your browser by the controller chosen. Changing the controller keeps the
+          situation, to compare them on the same one.</li>
+        <li><b>Sandbox</b>: you build the scene and set the conditions, and up to four controllers fly it
+          together. Opened from a live flight, it starts from that flight.</li>
+      </ul>
       <b>What you see</b>
       <ul>
         <li><span class="swatch" style="background: #f0a020"></span><b>Orange ball</b>: the target zone, 3 cm in radius.
@@ -347,7 +357,7 @@
         <li><b>Grey ring</b> on the ground: the start point. <b>Green disc</b>: the arena, 1.5 m in radius and
           1.2 m high, with 10 cm squares.</li>
         <li><b>Timeline</b>: red tick = sudden wing failure; hatched band = after the end of the episode
-          (live mode only: shown, not counted).</li>
+          (live and sandbox, after a loss of control: shown, not counted).</li>
       </ul>
       <b>Conditions</b> (Live mode menu; the recorded test episodes are in normal conditions, or sudden failure)
       <ul>
@@ -361,8 +371,10 @@
         <li><b>calm air</b>: no wind and no noise at all.</li>
       </ul>
       <b>Controllers</b>: PID and LQR are classical controllers designed by hand; the others are neural
-      networks trained by reinforcement learning, named algorithm · training conditions · training run
-      (e.g. "PPO · randomised · #1"). All of them see the same 48 numbers, measured with noise: altitude, speed,
+      networks trained by reinforcement learning, named algorithm · how it was trained · training run
+      (e.g. "PPO · randomised · #1"). "Transfer from obstacles": it started from a network trained on the
+      Obstacles task. "Fine-tuned": trained in normal conditions, then in randomised ones ("longer": twice as
+      many extra steps). "Best": the version saved at its best validation score, not the last one. All of them see the same 48 numbers, measured with noise: altitude, speed,
       tilt and spin, their previous command, the next two targets and the five nearest obstacles. None is told
       the wind, the bird's mass or a wing's damage.
     </div>
