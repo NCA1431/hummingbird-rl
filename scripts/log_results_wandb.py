@@ -40,6 +40,7 @@ It uses the W&B login of this computer (uv run wandb login): no key appears here
 """
 
 import argparse
+import logging
 import math
 import os
 import re
@@ -264,6 +265,11 @@ def replace_old(project: str, entity: str | None) -> None:
 
 def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: str) -> None:
     import wandb
+
+    # W&B copies each run's config into its own debug log, a file Windows opens in its old
+    # encoding (cp1252), which has no λ, α or −. Writing that line fails and Python prints the
+    # whole traceback, although the run itself is sent correctly. We drop such lines quietly.
+    logging.raiseExceptions = False
 
     for k, item in enumerate(runs, 1):
         run = wandb.init(project=project, entity=entity, group=GROUP, job_type="results", name=item["name"],
