@@ -14,6 +14,7 @@ import { newSeed } from "../modes/live";
 import {
   DEFAULT_SETTINGS,
   MAX_BIRDS,
+  MAX_WAYPOINTS,
   type SandboxSettings,
   type Tool,
   clearScene,
@@ -119,8 +120,9 @@ export class SandboxPanel {
       section(
         "Scene",
         "Target: click on the ground to place the target (navigation: the next waypoint, numbered). " +
-          "Obstacle: click to place a sphere. Erase: click a target or an obstacle to remove it. " +
-          "The see-through ball shows where and how high the next one goes.",
+          `Obstacle: click to place a sphere. Erase: click a target or an obstacle to remove it. ` +
+          `The see-through ball shows where and how high the next one goes. A course has ${MAX_WAYPOINTS} waypoints ` +
+          "at most; the controllers see the 5 nearest obstacles (the bird can hit any of them).",
       ),
     );
     const tools = el("div", { class: "seg" });
@@ -147,6 +149,9 @@ export class SandboxPanel {
     const cm = (v: number) => `${Math.round(100 * v)} cm`;
     this.slider(body, "height", 0.1, 1.0, 0.01, () => this.height, (v) => (this.height = v), cm, "height of the next target or obstacle", false);
     this.slider(body, "obstacle size", 0.03, 0.15, 0.005, () => this.radius, (v) => (this.radius = v), (v) => `r ${cm(v)}`, "radius of the next obstacle", false);
+    // What is wrong with the scene (or full), right under the tools that can change it.
+    this.notes = el("div", { class: "label sandbox-notes" });
+    body.append(this.notes);
 
     // Birds.
     body.append(
@@ -227,8 +232,6 @@ export class SandboxPanel {
     noiseLabel.append(noise, " sensor and actuator noise");
     body.append(noiseLabel);
 
-    this.notes = el("div", { class: "label sandbox-notes" });
-    body.append(this.notes);
     this.refresh();
     this.renderBirds();
   }
@@ -321,8 +324,20 @@ export class SandboxPanel {
 
   private refresh(): void {
     for (const r of this.sliders) r();
-    const tools = toolsFor(this.task);
+    this.updateTools();
+  }
+
+  /**
+   * Greys out the tools that cannot act on this scene, and drops the current one if it is among
+   * them (its preview with it): e.g. Target once a navigation course has all its waypoints.
+   */
+  private updateTools(): void {
+    const tools = toolsFor(this.task, this.scene);
     for (const t of ["target", "obstacle", "erase"] as const) this.toolButtons[t].disabled = !tools[t];
+    const full = this.task === "navigation" && !tools.target;
+    this.toolButtons.target.title = full
+      ? `A course has ${MAX_WAYPOINTS} waypoints at most: Erase one to place another`
+      : "Place the target (navigation: add the next waypoint)";
     if (this.tool && !tools[this.tool]) this.setTool(null);
   }
 
@@ -379,7 +394,11 @@ export class SandboxPanel {
 
   /** What prevents a meaningful flight, shown under the controls; true if the flight can go. */
   check(): boolean {
+    this.updateTools();
     const problems = sceneProblems(this.scene, this.task, p.r_bird);
+    if (this.task === "navigation" && this.scene.targets.length >= MAX_WAYPOINTS) {
+      problems.push(`${MAX_WAYPOINTS} waypoints, the most a course can have (Erase removes one)`);
+    }
     this.notes.textContent = problems.join(" · ");
     return !(this.task !== "hover" && this.scene.targets.length === 0);
   }

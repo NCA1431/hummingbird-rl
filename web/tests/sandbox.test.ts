@@ -18,6 +18,7 @@ import {
   sandboxConditions,
   sceneProblems,
   settingsFrom,
+  toolsFor,
   waitingEpisode,
 } from "../src/modes/sandbox";
 import { duration, endTime, sampleEpisode } from "../src/modes/watch";
@@ -75,6 +76,10 @@ describe("placing", () => {
     for (let i = 0; i < MAX_WAYPOINTS + 2; i++) scene = place(scene, "navigation", "target", [0.1 * i, 0.5, 0], 0.05);
     expect(scene.targets).toHaveLength(MAX_WAYPOINTS);
     expect(scene.targets[2]).toEqual([0.2, 0.5, 0]);
+    // The Target tool is then greyed out, and comes back once a waypoint is erased.
+    expect(toolsFor("navigation", scene).target).toBe(false);
+    expect(toolsFor("navigation", erase(scene, "target", 0)).target).toBe(true);
+    expect(toolsFor("goto", scene).target).toBe(true); // go-to-point: the click moves its one target
   });
 
   it("obstacles only where the task has them, and nothing outside the arena", () => {

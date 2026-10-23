@@ -62,9 +62,14 @@ export function sandboxConditions(s: SandboxSettings, p: BirdParams): Conditions
 
 export type Tool = "target" | "obstacle" | "erase" | null;
 
-/** Which tools make sense for a task: hover's target is the start point, only two tasks have obstacles. */
-export function toolsFor(task: string): { target: boolean; obstacle: boolean; erase: boolean } {
-  return { target: task !== "hover", obstacle: task === "obstacles" || task === "navigation", erase: task !== "hover" };
+/**
+ * Which tools make sense for a task: hover's target is the start point, only two tasks have
+ * obstacles. Given the scene, also whether a tool can still do something now: a navigation
+ * course holds MAX_WAYPOINTS waypoints at most.
+ */
+export function toolsFor(task: string, scene: Scene | null = null): { target: boolean; obstacle: boolean; erase: boolean } {
+  const full = task === "navigation" && scene !== null && scene.targets.length >= MAX_WAYPOINTS;
+  return { target: task !== "hover" && !full, obstacle: task === "obstacles" || task === "navigation", erase: task !== "hover" };
 }
 
 /** Keeps a point inside the arena, horizontally (also where the preview of the next placement is drawn). */
