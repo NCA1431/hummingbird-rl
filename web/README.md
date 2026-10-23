@@ -20,7 +20,12 @@ npm run build      # static site in dist/ (type check first)
   limit, with a grey trail, a hatched band on the timeline and a note in the HUD: shown, not counted.
 - `src/view/` — the stage (camera, lights, arena), the bird, its wing motion from measured
   data (`wingData.json`, Song et al. 2016), targets, obstacles, trail and wind arrow.
-- `src/ui/panel.ts` — controls (Recorded / Live) and head-up display.
+- `src/ui/panel.ts` — controls (Recorded / Live / Sandbox) and head-up display; `src/ui/words.ts` — the
+  names of tasks, controllers (a transfer or a fine-tuning is said as such) and endings; `src/ui/sandboxPanel.ts` and
+  `src/modes/sandbox.ts` — the sandbox: targets, numbered waypoints and obstacles placed by clicking on the
+  ground (a see-through preview shows where and how high) and removed with Erase; wind, mass, wing damage,
+  sudden failure and noise set by hand; up to four controllers flying the same situation, each bird in its
+  colour, drawn or as the 3D model, the camera following the one chosen. Every change flies again.
 - `tests/golden/` — inputs and outputs recorded in Python by `scripts/export_web.py golden`
   (simulator, observations, networks, whole PID and LQR episodes); regenerate them, with
   `src/control/lqr_gains.json`, only if the physics, the tasks or the controllers change, then rerun `npm test`.

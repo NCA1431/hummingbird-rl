@@ -1,36 +1,41 @@
 /**
  * The page's controls and the head-up display, in plain HTML.
  *
- * Two modes share the same controls and the same HUD:
+ * Three modes share the same controls and the same HUD:
  *   Recorded  task -> controller -> episode: the test episodes exported from
  *             Python, replayed exactly as they were measured;
  *   Live      task -> controller -> conditions, and "New flight": a new random
  *             situation, flown by the controller in the browser. Changing the
  *             controller or the conditions keeps the same seed, so two
- *             controllers can be compared on exactly the same scene.
+ *             controllers can be compared on exactly the same scene;
+ *   Sandbox   the visitor builds the scene and the conditions (sandboxPanel.ts),
+ *             and flies up to four controllers in the same situation.
  * The HUD shows the conditions of the episode (wind, mass, damage, the sudden
- * failure if any), the state of the bird, and the result once it is over.
+ * failure if any), the state of the bird, and the result once it is over. With
+ * several birds, it shows the state of each, and the numbers of the one followed.
  */
 
 import type { PolicyEntry } from "../control/mlp";
 import { newSeed } from "../modes/live";
+import type { Tool } from "../modes/sandbox";
 import type { Episode, IndexEntry } from "../modes/watch";
-import type { RegimeName } from "../sim/disturbances";
+import type { Conditions, RegimeName } from "../sim/disturbances";
 import { TASKS } from "../sim/tasks";
+import type { Scene } from "../sim/world";
+import { BIRD_COLORS } from "../view/bird";
+import { type BirdSlot, SandboxPanel } from "./sandboxPanel";
+import { TASK_NAMES, ending, label } from "./words";
 
 export const SPEEDS: [number, string][] = [
   [1 / 64, "1/64"], [1 / 16, "1/16"], [1 / 4, "1/4"], [1, "1"], [2, "2"], [4, "4"],
 ];
 export type CameraMode = "follow" | "overview" | "side" | "top" | "behind" | "eye";
-export type Mode = "recorded" | "live";
-
-const TASK_NAMES: Record<string, string> = {
-  hover: "Hover & recover", goto: "Go-to-point", obstacles: "Obstacles", navigation: "Navigation",
-};
+export type Mode = "recorded" | "live" | "sandbox";
 
 const ABOUT: Record<Mode, string> = {
   recorded: "Hummingbird RL · recorded test episodes, replayed exactly as they were measured.",
   live: "Hummingbird RL · live: new random situations, flown in your browser.",
+  sandbox: "Hummingbird RL · sandbox: build a scene, then fly up to four controllers in it.",
 };
 
 /** What the live mode should fly. */
@@ -42,9 +47,34 @@ export interface LiveChoice {
   seed: number;
 }
 
+/** A controller of the sandbox: its name, and its network file (null for PID and LQR). */
+export interface Pilot {
+  controller: string;
+  file: string | null;
+}
+
+/**
+ * What the sandbox should fly: up to four controllers in a scene and conditions set by hand.
+ * No pilots: the scene cannot be flown yet (a navigation course without waypoints), only shown.
+ */
+export interface SandboxChoice {
+  task: string;
+  pilots: Pilot[];
+  followed: number; // the bird the camera and the HUD follow
+  scene: Scene;
+  conditions: Conditions;
+  seed: number;
+  resetCamera: boolean; // false while editing, so that the view stays where the visitor put it
+}
+
 export interface PanelHandlers {
   select(entry: IndexEntry): void;
   live(choice: LiveChoice): void;
+  sandbox(choice: SandboxChoice): void;
+  current(): Episode | null; // the episode on screen, which the sandbox starts from
+  tool(tool: Tool): void;
+  looks(slots: BirdSlot[]): void; // the sandbox birds' look changed (3D model or drawn)
+  follow(index: number): void; // the sandbox's followed bird changed
   playPause(): void;
   restart(): void;
   speed(s: number): void;
@@ -70,6 +100,14 @@ export interface Readout {
   wings: [number, number, number]; // commanded half-stroke amplitude of the left and right wing (rad), frequency (Hz)
   hold: number; // 0..1
   failed: boolean; // the sudden failure has happened
+  birds: BirdState[]; // the sandbox's birds, when there are several (empty otherwise)
+}
+
+/** The state of one of the sandbox's birds, for the HUD's first line. */
+export interface BirdState {
+  ep: Episode;
+  ended: boolean;
+  followed: boolean;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -77,36 +115,6 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 /** PID and LQR first, then the agents in alphabetical order. */
 const rank = (p: string) => (p === "pid" ? 0 : p === "lqr" ? 1 : 2);
 const byRank = (a: string, b: string) => rank(a) - rank(b) || a.localeCompare(b);
-/**
- * How an episode ended, in plain words: short for the menus, long for the HUD. The limits are
- * those of the simulator: ground at 2 cm, arena 1.5 m wide and 1.2 m high, 80° of pitch or roll.
- */
-function ending(task: string, success: boolean, reason: string, long: boolean): string {
-  if (success) return "success";
-  const words: Record<string, [string, string]> = {
-    time_limit: [
-      "time limit",
-      task === "hover"
-        ? "time limit: more than 3 cm from the target on average over the last 2 s"
-        : "time limit: the target was not held in time",
-    ],
-    loss_of_control: ["lost control", "lost control: tilted past 80°"],
-    collision: ["hit an obstacle", "hit an obstacle"],
-    crash: ["hit the ground", "crashed into the ground"],
-    out_of_bounds: ["left the arena", "left the arena"],
-  };
-  const w = words[reason];
-  return w ? w[long ? 1 : 0] : reason.replace(/_/g, " ");
-}
-
-/** "PID", "LQR", or a run name made readable: ppo_hover_randomised_s1 -> "PPO · randomised · #1". */
-function label(p: string): string {
-  if (p === "pid" || p === "lqr") return p.toUpperCase();
-  const m = /^(ppo|sac|td3)_(hover|goto|obstacles|navigation)_(.+?)_s(\d+)(_best)?$/.exec(p);
-  if (!m) return p;
-  return [m[1].toUpperCase(), m[3].replace(/_/g, " "), `#${m[4]}`, m[5] ? "best" : ""].filter(Boolean).join(" · ");
-}
-
 export class Panel {
   mode: Mode = "recorded";
   private entries: IndexEntry[] = [];
@@ -117,7 +125,12 @@ export class Panel {
   private readonly episode = $<HTMLSelectElement>("episode");
   private readonly regime = $<HTMLSelectElement>("regime");
   private readonly newFlight = $<HTMLButtonElement>("new-flight");
-  private readonly modeButtons = { recorded: $<HTMLButtonElement>("mode-recorded"), live: $<HTMLButtonElement>("mode-live") };
+  private readonly modeButtons = {
+    recorded: $<HTMLButtonElement>("mode-recorded"),
+    live: $<HTMLButtonElement>("mode-live"),
+    sandbox: $<HTMLButtonElement>("mode-sandbox"),
+  };
+  readonly sandbox: SandboxPanel;
   private readonly play = $<HTMLButtonElement>("play");
   private readonly slider = $<HTMLInputElement>("time");
   private readonly info = $<HTMLDivElement>("info");
@@ -129,13 +142,20 @@ export class Panel {
   private seeking = false;
 
   constructor(private readonly h: PanelHandlers) {
+    this.sandbox = new SandboxPanel({
+      changed: (resetCamera) => this.chooseSandbox(resetCamera),
+      tool: (tool) => h.tool(tool),
+      looks: (slots) => h.looks(slots),
+      follow: (index) => h.follow(index),
+    });
     this.task.onchange = () => this.fillPolicies(true);
-    this.policy.onchange = () => (this.mode === "live" ? this.chooseLive() : this.fillEpisodes());
+    this.policy.onchange = () => (this.mode === "live" ? this.chooseLive() : this.fillEpisodes()); // hidden in the sandbox
     this.episode.onchange = () => this.choose();
     this.regime.onchange = () => this.chooseLive();
     this.newFlight.onclick = () => this.chooseLive(true);
     this.modeButtons.recorded.onclick = () => this.setMode("recorded");
     this.modeButtons.live.onclick = () => this.setMode("live");
+    this.modeButtons.sandbox.onclick = () => this.setMode("sandbox");
     this.play.onclick = () => h.playPause();
     $<HTMLButtonElement>("restart").onclick = () => h.restart();
     this.slider.oninput = () => {
@@ -172,7 +192,7 @@ export class Panel {
       h.model(on);
     };
     // Fold buttons. On a phone the HUD starts folded: the two panels would hide half the scene.
-    for (const [buttonId, panelId] of [["fold-hud", "hud"], ["fold-controls", "controls"]]) {
+    for (const [buttonId, panelId] of [["fold-hud", "hud"], ["fold-controls", "controls"], ["fold-sandbox", "sandbox"]]) {
       const button = $<HTMLButtonElement>(buttonId);
       const box = $<HTMLDivElement>(panelId);
       const fold = (folded: boolean) => {
@@ -216,23 +236,25 @@ export class Panel {
   /** The networks exported for the live mode (public/policies/index.json). */
   setPolicies(networks: PolicyEntry[]): void {
     this.networks = networks;
-    if (this.mode === "live") this.fillPolicies(false, false); // the current flight stays on screen
+    if (this.mode !== "recorded") this.fillPolicies(false, false); // the current flight stays on screen
   }
 
   setMode(mode: Mode): void {
     this.mode = mode;
-    const live = mode === "live";
-    this.modeButtons.recorded.classList.toggle("on", !live);
-    this.modeButtons.live.classList.toggle("on", live);
-    this.episode.hidden = live;
-    this.regime.hidden = !live;
-    this.newFlight.hidden = !live;
+    for (const m of ["recorded", "live", "sandbox"] as const) this.modeButtons[m].classList.toggle("on", m === mode);
+    this.episode.hidden = mode !== "recorded";
+    this.regime.hidden = mode !== "live";
+    this.newFlight.hidden = mode !== "live";
+    // In the sandbox each bird has its controller and its look, in the sandbox's panel.
+    this.policy.hidden = mode === "sandbox";
+    $<HTMLButtonElement>("model").hidden = mode === "sandbox";
+    this.sandbox.show(mode === "sandbox");
     $<HTMLDivElement>("about").textContent = ABOUT[mode];
     this.fillTasks();
   }
 
   private fillTasks(): void {
-    const tasks = this.mode === "live" ? [...TASKS] : [...new Set(this.entries.map((e) => e.task))];
+    const tasks = this.mode !== "recorded" ? [...TASKS] : [...new Set(this.entries.map((e) => e.task))];
     tasks.sort((a, b) => Object.keys(TASK_NAMES).indexOf(a) - Object.keys(TASK_NAMES).indexOf(b));
     keep(this.task, tasks.map((t) => new Option(TASK_NAMES[t] ?? t, t)));
     this.fillPolicies(true);
@@ -242,13 +264,18 @@ export class Panel {
   private fillPolicies(newTask: boolean, fly = true): void {
     const task = this.task.value;
     const names =
-      this.mode === "live"
+      this.mode !== "recorded"
         ? ["pid", "lqr", ...this.networks.filter((n) => n.task === task).map((n) => n.name)]
         : [...new Set(this.entries.filter((e) => e.task === task).map((e) => e.policy))];
-    keep(this.policy, names.sort(byRank).map((p) => new Option(label(p), p)));
+    names.sort(byRank);
+    keep(this.policy, names.map((p) => new Option(label(p), p)));
+    if (this.mode === "sandbox") this.sandbox.setControllers(names.map((p) => [p, label(p)]));
     if (!fly) return;
     if (this.mode === "live") this.chooseLive(newTask);
-    else this.fillEpisodes();
+    else if (this.mode === "sandbox") {
+      if (newTask) this.sandbox.start(task, this.h.current(), this.policy.value);
+      this.chooseSandbox(newTask);
+    } else this.fillEpisodes();
   }
 
   private fillEpisodes(): void {
@@ -284,7 +311,30 @@ export class Panel {
     });
   }
 
-  showEpisode(ep: Episode, weight: number): void {
+  private pilot(name: string): Pilot {
+    const network = this.networks.find((n) => n.name === name);
+    return { controller: name, file: network ? network.file : null };
+  }
+
+  private chooseSandbox(resetCamera: boolean): void {
+    const ready = this.sandbox.check(); // false for a navigation course without waypoints yet
+    this.h.sandbox({
+      task: this.task.value,
+      pilots: ready ? this.sandbox.slots.map((s) => this.pilot(s.controller)) : [],
+      followed: this.sandbox.followed,
+      scene: this.sandbox.scene,
+      conditions: this.sandbox.conditions(),
+      seed: this.sandbox.seed,
+      resetCamera,
+    });
+  }
+
+  /**
+   * The line about the episode on screen, and the timeline. `end`: the timeline's length, which
+   * in the sandbox is the longest of the birds' flights, not necessarily this one's; `birds`: how
+   * many fly (the sandbox), `followed`: which of them flies `ep`.
+   */
+  showEpisode(ep: Episode, weight: number, end: number, birds = 1, followed = 0): void {
     const c = ep.conditions;
     const wind = Math.hypot(...c.mean_wind) / weight;
     const pct = (x: number) => `${Math.round(100 * x)}%`;
@@ -296,7 +346,9 @@ export class Panel {
         : c.failure_time < total
           ? ` · <b>sudden failure</b>: ${wing} wing −${pct(c.failure_amount)} at ${c.failure_time.toFixed(2)} s`
           : ` · sudden failure planned at ${c.failure_time.toFixed(2)} s, not reached (the flight ended before)`;
-    const which = ep.suite === "live" ? `live flight, seed ${ep.seed}` : `${ep.suite ?? ""} episode ${ep.seed}`;
+    const which =
+      ep.suite === "live" || ep.suite === "sandbox" ? `${ep.suite} flight, seed ${ep.seed}` : `${ep.suite ?? ""} episode ${ep.seed}`;
+    const who = birds > 1 ? `${birds} birds, following ${dot(followed)} ${label(ep.policy ?? "?")}` : label(ep.policy ?? "?");
     // Only what differs from the nominal bird is listed: a mass other than 1 and a wing weakened
     // from the start appear in randomised conditions, the sudden failure in its own regime.
     // In % of the normal bird's weight, the unit in which the conditions are drawn (up to 30%
@@ -307,13 +359,15 @@ export class Panel {
       .filter((i) => c.damage[i] > 0)
       .map((i) => ` · ${i === 0 ? "left" : "right"} wing weakened by ${pct(c.damage[i])} from the start`)
       .join("");
+    const head = ep.result.reason === "no_course" ? "no course yet" : `${who} · ${which}`;
     this.info.innerHTML =
-      `<b>${TASK_NAMES[ep.task] ?? ep.task}</b> · ${label(ep.policy ?? "?")} · ${which}` +
-      `<span class="more"><br>${air}${mass}${weak}${failure}</span>`;
-    this.slider.max = String(total);
+      `<b>${TASK_NAMES[ep.task] ?? ep.task}</b> · ${head}` + `<span class="more"><br>${air}${mass}${weak}${failure}</span>`;
+    // Marks in fractions of the whole timeline. The failure is the same for every bird, so it is
+    // marked as long as one of them is still flying then; the band starts where `ep` ended.
+    this.slider.max = String(end);
     this.slider.step = "any"; // a flight can end between two decisions: the end must be reachable
-    place(this.markFailure, c.failure_time !== null && c.failure_time < total ? c.failure_time / total : null);
-    place(this.afterBand, ep.endFrame !== undefined ? ep.frames.t[ep.endFrame] / total : null);
+    place(this.markFailure, c.failure_time !== null && c.failure_time < end ? c.failure_time / end : null);
+    place(this.afterBand, ep.endFrame !== undefined ? ep.frames.t[ep.endFrame] / end : null);
   }
 
   update(ep: Episode, v: Readout): void {
@@ -326,8 +380,21 @@ export class Panel {
       ? `<b>${ending(ep.task, ep.result.success, ep.result.reason, true)}</b>` +
         (v.after ? " · <i>after the end of the episode: shown, not counted</i>" : "")
       : `flying${failure}`;
+    // Several birds: one line with the state of each, the followed one underlined; then the
+    // numbers of the followed bird, as for a single bird.
+    const first = v.birds.length
+      ? v.birds
+          .map((b, i) => {
+            const name = b.followed ? `<u>${label(b.ep.policy ?? "?")}</u>` : label(b.ep.policy ?? "?");
+            const state = b.ended ? `<b>${ending(b.ep.task, b.ep.result.success, b.ep.result.reason, false)}</b>` : "flying";
+            // The followed bird's flight after its end is shown, not counted: say so next to it.
+            const after = b.followed && v.after ? " <i>(after its end: shown, not counted)</i>" : "";
+            return `${dot(i)} ${name} ${state}${after}`;
+          })
+          .join(" · ")
+      : status;
     this.readout.innerHTML =
-      `${status}<span class="more"><br>` +
+      `${first}<span class="more"><br>` +
       `altitude ${(100 * v.altitude).toFixed(1)} cm · speed ${(100 * v.velocity).toFixed(0)} cm/s · ` +
       `distance ${(100 * v.distance).toFixed(1)} cm · thrust ${v.thrustRatio.toFixed(2)} × weight` +
       (v.hold > 0 ? ` · holding ${Math.round(100 * v.hold)}%` : "") +
@@ -340,6 +407,7 @@ export class Panel {
     model.disabled = !ok;
     model.dataset.on = ok ? "1" : "0";
     model.textContent = ok ? "3D model" : "Drawn bird";
+    this.sandbox.setModelAvailable(ok);
   }
 
   message(html: string): void {
@@ -348,6 +416,9 @@ export class Panel {
 }
 
 const deg = (rad: number) => ((rad * 180) / Math.PI).toFixed(0);
+
+/** A dot in the colour of the sandbox's bird `i`. */
+const dot = (i: number) => `<span style="color:#${BIRD_COLORS[i].toString(16).padStart(6, "0")}">●</span>`;
 
 /** Puts a timeline mark (or the start of the band) at fraction `f` of the slider's length, or hides it (null). */
 function place(mark: HTMLElement, f: number | null): void {

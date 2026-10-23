@@ -22,7 +22,8 @@
  * showed the bird on a dark grey background, ours on a light sky, against which
  * the same shading looked flat.
  *
- * One addition: a damaged wing turns orange-red in proportion to its damage
+ * Two additions. In the sandbox, the other birds are tinted with their colour
+ * (`tint`), so that each can be told apart. And a damaged wing turns orange-red in proportion to its damage
  * (fully at 40%), as on the drawn bird. Each vertex carries how much it belongs
  * to the left and to the right wing (`wingWeight`, from its skinning weights,
  * computed in bird.ts), so the colour fades smoothly into the body.
@@ -66,6 +67,7 @@ uniform vec3 fillDir;
 uniform float exposure;
 uniform float alphaCutoff;
 uniform vec2 damage;   // force lost by the (left, right) wing, 0 to 1
+uniform vec4 tint;     // colour (raw albedo units) and amount: the sandbox's other birds are tinted
 
 varying vec2 vUv;
 varying vec3 vWorldPos;
@@ -96,6 +98,7 @@ vec3 perturbNormal(vec3 pos, vec3 n, vec2 uv, vec3 mapN) {
 void main() {
   vec4 albedo = texture2D(albedoTex, vUv);
   if (albedo.a < alphaCutoff) discard;
+  albedo.rgb = mix(albedo.rgb, tint.rgb, tint.a);
   float hurt = clamp(dot(vWing, damage) / 0.4, 0.0, 1.0);
   albedo.rgb = mix(albedo.rgb, HURT, 0.8 * hurt);
   vec4 sg = texture2D(specglossTex, vUv);
@@ -162,6 +165,7 @@ export function featherMaterial(
       exposure: { value: 4.2 },
       alphaCutoff: { value: 0.5 },
       damage: { value: new THREE.Vector2(0, 0) },
+      tint: { value: new THREE.Vector4(0, 0, 0, 0) },
     },
   });
 }

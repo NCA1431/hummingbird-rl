@@ -89,6 +89,109 @@
         border-radius: 0 6px 6px 0;
         border-left: none;
       }
+      .seg button:not(:first-child):not(:last-child) {
+        border-radius: 0;
+        border-left: none;
+      }
+      /* The sandbox's controls, on the right. */
+      #sandbox {
+        left: auto;
+        right: 12px;
+        top: 150px;
+        width: 290px;
+        max-height: calc(100vh - 180px);
+        overflow-y: auto;
+      }
+      #sandbox .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 2px 0;
+      }
+      #sandbox .section {
+        margin-top: 8px;
+        font-weight: 600;
+      }
+      #sandbox .seg {
+        margin: 2px 0;
+      }
+      #sandbox .slider {
+        display: grid;
+        grid-template-columns: 100px 1fr 54px;
+        align-items: center;
+        gap: 6px;
+      }
+      #sandbox .slider input {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      #sandbox .value {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        text-align: right;
+      }
+      @media (max-width: 1200px) {
+        #sandbox {
+          max-height: calc(100vh - 330px); /* above the controls, which it overlaps on narrow screens */
+        }
+      }
+      .sandbox-notes {
+        margin-top: 6px;
+        color: #b45309;
+      }
+      /* Help that stays out of the way: a hint that can be closed, and an (i) per section. */
+      #sandbox .hint {
+        position: relative;
+        margin: 6px 0 2px;
+        padding: 5px 24px 5px 8px;
+        border-radius: 6px;
+        background: rgba(43, 108, 176, 0.08);
+        color: var(--muted);
+      }
+      #sandbox .hint .close {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        padding: 0 6px;
+        border: none;
+        background: none;
+      }
+      #sandbox .info {
+        width: 15px;
+        height: 15px;
+        margin-left: 6px;
+        padding: 0;
+        border-radius: 50%;
+        font: italic 600 10px/13px Georgia, serif;
+        color: var(--muted);
+        cursor: help;
+        vertical-align: 1px;
+      }
+      #sandbox .help {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 2px 0 4px;
+      }
+      /* One row per bird: colour, controller, look, followed, remove. */
+      #sandbox .bird {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        margin: 3px 0;
+      }
+      #sandbox .bird select {
+        flex: 1;
+        min-width: 0;
+      }
+      #sandbox .bird button {
+        padding: 2px 6px;
+      }
+      #sandbox .chip {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+      }
       #timeline {
         position: relative;
         flex: 1;
@@ -219,6 +322,11 @@
       <div id="readout"></div>
     </div>
     <div id="about"></div>
+    <div id="sandbox" class="panel" hidden>
+      <button id="fold-sandbox" class="fold" title="Fold">−</button>
+      <b>Sandbox</b>
+      <div class="sandbox-body more"></div>
+    </div>
     <div id="legend" class="panel">
       <b>What you see</b>
       <ul>
@@ -228,8 +336,10 @@
           The other navigation waypoints are 4 cm balls, only to be crossed. Faded: already reached.
           The dashed line gives the target's height.</li>
         <li><span class="swatch" style="background: #8a7a68"></span><b>Brown spheres</b>: obstacles; touching one ends the flight.</li>
-        <li><b>Trail</b>: the path flown, blue when slow, red at 1 m/s and more; grey after the end of the episode.</li>
-        <li><b>Blue arrow</b> above the bird: the wind (50 cm = a wind as strong as the bird's weight).</li>
+        <li><b>Trail</b>: the path flown, blue when slow, red at 1 m/s and more; grey after the end of the episode.
+          With several birds (sandbox), each trail has its bird's colour.</li>
+        <li><b>Blue arrow</b> above the bird: the wind (50 cm = a wind as strong as the bird's weight). The wind
+          is the same everywhere in the arena, so with several birds one arrow, above the bird followed, says it for all.</li>
         <li><b>Orange-red wing</b>: a wing that has lost force (fully coloured at 40%).</li>
         <li><b>Grey ring</b> on the ground: the start point. <b>Green disc</b>: the arena, 1.5 m in radius and
           1.2 m high, with 10 cm squares.</li>
@@ -268,6 +378,7 @@
         <span class="seg">
           <button id="mode-recorded" class="on" title="Test episodes recorded in Python">Recorded</button>
           <button id="mode-live" title="New flights simulated in your browser">Live</button>
+          <button id="mode-sandbox" title="Build the situation yourself">Sandbox</button>
         </span>
         <select id="task" aria-label="Task"></select>
         <select id="policy" aria-label="Controller"></select>

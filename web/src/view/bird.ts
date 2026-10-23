@@ -27,7 +27,6 @@
  */
 
 import * as THREE from "three";
-import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 
 import type { WingCommand } from "../sim/aero";
 import { type BirdParams, type Vec3, hoverAmplitude, radians } from "../sim/params";
@@ -59,6 +58,24 @@ const MODEL_ROOT_BONE = "Root.2";
 // side of their mean orientation, close to our hover amplitude (64°), so we take the clip as
 // the hover stroke and scale each shoulder's swing by (commanded amplitude / hover amplitude).
 const MODEL_SHOULDERS = ["Shldr_L.9", "Shldr_R.27"];
+
+/** The colour of each bird of the sandbox: the first one keeps its natural colours. */
+export const BIRD_COLORS = [0x1d7a4c, 0x2f6fb5, 0xd9731a, 0x8a4fbf];
+
+// The clip is prepared once (root motion removed, rotations smoothed) and shared by every bird.
+const prepared = new WeakMap<THREE.AnimationClip, THREE.AnimationClip>();
+function prepareClip(source: THREE.AnimationClip): THREE.AnimationClip {
+  let clip = prepared.get(source);
+  if (!clip) {
+    const root = THREE.PropertyBinding.sanitizeNodeName(MODEL_ROOT_BONE) + ".";
+    clip = source.clone();
+    clip.tracks = clip.tracks
+      .filter((t) => !t.name.startsWith(root)) // keep the wings, not the root motion
+      .map((t) => (t instanceof THREE.QuaternionKeyframeTrack ? smoothTrack(t) : t));
+    prepared.set(source, clip);
+  }
+  return clip;
+}
 
 interface Shoulder {
   bone: THREE.Object3D;
@@ -157,7 +174,7 @@ function scaleSwing(s: Shoulder, k: number): void {
 }
 
 /** An ellipsoid whose vertices are coloured by direction: green back, pale belly, optional red throat. */
-function bodyPart(radii: Vec3, throat: boolean, taper = 0.0): THREE.Mesh {
+function bodyPart(radii: Vec3, throat: boolean, taper = 0.0, back: THREE.Color = BACK): THREE.Mesh {
   const geo = new THREE.SphereGeometry(1, 28, 18);
   const n = geo.attributes.normal;
   const pos = geo.attributes.position;
@@ -165,7 +182,7 @@ function bodyPart(radii: Vec3, throat: boolean, taper = 0.0): THREE.Mesh {
   const c = new THREE.Color();
   for (let i = 0; i < n.count; i++) {
     const up = THREE.MathUtils.smoothstep(n.getY(i), -0.35, 0.35);
-    c.copy(BELLY).lerp(BACK, up);
+    c.copy(BELLY).lerp(back, up);
     if (throat && n.getY(i) < -0.15 && n.getX(i) > -0.2) c.copy(THROAT);
     c.toArray(colors, 3 * i);
     // Egg shape: the rear half (x < 0) narrows towards the tail.
@@ -301,7 +318,9 @@ export class Bird {
   private swing: [number, number] = [1, 1]; // each wing's amplitude / hover amplitude
   private readonly hoverAmp: number;
 
-  constructor(p: BirdParams) {
+  /** `back`: colour of the drawn bird's back and tail (each of the sandbox's birds has its own). */
+  constructor(p: BirdParams, back: number = BACK.getHex()) {
+    const backColor = new THREE.Color(back);
     this.hoverAmp = hoverAmplitude(p);
     const length = p.span / 2 - p.wing_root;
     this.left = new Wing(-1, p.wing_root, length, 0.011);
@@ -314,13 +333,13 @@ export class Bird {
     const posture = new THREE.Group();
     posture.position.set(0.004, 0.004, 0); // pivot just behind the shoulders
     posture.rotation.z = radians(45);
-    const torso = bodyPart([0.02, 0.0085, 0.009], false, 0.45);
+    const torso = bodyPart([0.02, 0.0085, 0.009], false, 0.45, backColor);
     torso.position.set(-0.012, -0.004, 0);
 
     const neck = new THREE.Group();
     neck.position.set(0.008, 0.001, 0);
     neck.rotation.z = -radians(35); // head and beak 10° above the horizontal in hover
-    const head = bodyPart([0.0072, 0.0066, 0.0066], true);
+    const head = bodyPart([0.0072, 0.0066, 0.0066], true, 0.0, backColor);
     head.position.set(0.004, 0, 0);
     const beak = new THREE.Mesh(
       new THREE.ConeGeometry(0.0009, 0.02, 10),
@@ -349,7 +368,7 @@ export class Bird {
     tailGeo.rotateY(-Math.PI / 2); // the fan now points backwards (-x)
     const tail = new THREE.Mesh(
       tailGeo,
-      new THREE.MeshStandardMaterial({ color: 0x173d2b, side: THREE.DoubleSide, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: backColor.clone().multiplyScalar(0.55), side: THREE.DoubleSide, roughness: 0.6 }),
     );
     tail.position.set(-0.03, -0.005, 0);
     tail.castShadow = true;
@@ -361,11 +380,20 @@ export class Bird {
   }
 
   /**
-   * Adds the 3D model, once loaded, and shows it instead of the drawn bird. `specGloss` is the
-   * model's specular-glossiness map (shipped as a separate file, see feathers.ts) and `keyDir`
-   * the direction the sunlight comes from.
+   * Adds the 3D model, once loaded, and shows it instead of the drawn bird. `model` is a copy
+   * of the loaded scene (each bird needs its own skeleton), `specGloss` the model's
+   * specular-glossiness map (shipped as a separate file, see feathers.ts), `keyDir` the
+   * direction the sunlight comes from and `tint` the colour mixed into its feathers (null:
+   * its natural colours).
    */
-  attachModel(gltf: GLTF, specGloss: THREE.Texture, keyDir: THREE.Vector3): void {
+  attachModel(
+    model: THREE.Object3D,
+    animations: THREE.AnimationClip[],
+    specGloss: THREE.Texture,
+    keyDir: THREE.Vector3,
+    tint: number | null = null,
+  ): void {
+    const gltf = { scene: model };
     const wrapper = new THREE.Group();
     // The model faces +z with its left wing along +x; our bird faces +x with its right wing
     // along +z. A quarter turn about the vertical maps one onto the other.
@@ -381,6 +409,11 @@ export class Bird {
         const original = mesh.material as THREE.MeshStandardMaterial;
         mesh.customDepthMaterial = featherShadowMaterial(original);
         const material = featherMaterial(original, specGloss, keyDir);
+        if (tint !== null) {
+          // About a fifth of the colour, in the raw albedo's units (the shader multiplies by 4.2).
+          const c = new THREE.Color(tint);
+          (material.uniforms.tint.value as THREE.Vector4).set(0.22 * c.r, 0.22 * c.g, 0.22 * c.b, 0.6);
+        }
         mesh.material = material;
         this.feathers.push(material);
         const bones = shoulderBones.every((b) => b) ? (shoulderBones as THREE.Object3D[]) : [];
@@ -391,12 +424,9 @@ export class Bird {
     this.body.add(wrapper);
     this.model = wrapper;
     this.mixer = new THREE.AnimationMixer(gltf.scene);
-    const clip = THREE.AnimationClip.findByName(gltf.animations, "hover") ?? gltf.animations[0];
-    if (clip) {
-      const root = THREE.PropertyBinding.sanitizeNodeName(MODEL_ROOT_BONE) + ".";
-      clip.tracks = clip.tracks
-        .filter((t) => !t.name.startsWith(root)) // keep the wings, not the root motion
-        .map((t) => (t instanceof THREE.QuaternionKeyframeTrack ? smoothTrack(t) : t));
+    const source = THREE.AnimationClip.findByName(animations, "hover") ?? animations[0];
+    if (source) {
+      const clip = prepareClip(source);
       this.mixer.clipAction(clip).play();
       this.mixer.update(0);
       for (const name of MODEL_SHOULDERS) {

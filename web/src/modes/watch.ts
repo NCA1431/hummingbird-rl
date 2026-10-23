@@ -27,6 +27,8 @@ export interface Episode {
     failure_time: number | null;
     failure_wing: number;
     failure_amount: number;
+    action_noise?: number;
+    obs_noise?: number;
   };
   result: { success: boolean; reason: string; return: number; length: number; energy: number };
   // Live mode only: the frame at which the episode ended, when frames follow it (what happened
@@ -127,18 +129,24 @@ export function damageAt(ep: Episode, t: number): [number, number] {
   return d;
 }
 
-/** Simulated time, advanced by real time × speed; it stops at the end of the episode. */
+/**
+ * Simulated time, advanced by real time × speed; it stops at the end of the episode, or at
+ * `end` when given (the sandbox plays two episodes together, until the longer one ends).
+ */
 export class Playback {
   time = 0.0;
   speed = 1.0;
   playing = true;
 
-  constructor(public episode: Episode) {}
+  constructor(
+    public episode: Episode,
+    readonly end: number = duration(episode),
+  ) {}
 
   /** Advances by `realDt` seconds of real time; returns the simulated time elapsed. */
   advance(realDt: number): number {
     if (!this.playing) return 0.0;
-    const end = duration(this.episode);
+    const end = this.end;
     const before = this.time;
     this.time = Math.min(this.time + realDt * this.speed, end);
     if (this.time >= end) this.playing = false;
@@ -146,7 +154,7 @@ export class Playback {
   }
 
   seek(t: number): void {
-    this.time = Math.min(Math.max(t, 0), duration(this.episode));
+    this.time = Math.min(Math.max(t, 0), this.end);
   }
 
   restart(): void {

@@ -56,8 +56,9 @@ uv run python -c "from hummingbird_rl.envs import make_env; env = make_env('goto
 
 ## Web viewer
 
-Needs Node.js (LTS). Two modes. **Recorded** replays test episodes exactly as they were measured.
-**Live** flies new random episodes in the browser: the simulator, the tasks, the PID, the LQR and the
+Needs Node.js (LTS). Three modes. **Recorded** replays test episodes exactly as they were measured.
+**Sandbox** lets you place the targets and obstacles and set the wind, mass and wing damage yourself,
+and fly up to four controllers in exactly the same situation, each bird in its own colour. **Live** flies new random episodes in the browser: the simulator, the tasks, the PID, the LQR and the
 trained networks are ported to TypeScript and checked against the Python code on recorded inputs and
 outputs (`web/tests/golden/`): whole PID and LQR episodes agree to 1e-9 m, the networks to 1e-5.
 

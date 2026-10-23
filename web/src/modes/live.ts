@@ -21,16 +21,27 @@
 import type { Controller } from "../control/controller";
 import { decodeAction, wingThrusts } from "../sim/aero";
 import type { RegimeName } from "../sim/disturbances";
-import { HummingbirdEnv } from "../sim/env";
+import { HummingbirdEnv, type ResetOptions } from "../sim/env";
 import type { Vec3 } from "../sim/params";
 import type { Quat } from "../sim/rotations";
 import type { Episode } from "./watch";
 
 export const LIVE_FORMAT = "hummingbird-episode/1";
 
-export function simulateEpisode(task: string, regime: RegimeName, controller: Controller, seed: number): Episode {
+/**
+ * One episode. `options` can fix the scene and the conditions instead of drawing them (the
+ * sandbox does); the start push and the noise always come from `seed`.
+ */
+export function simulateEpisode(
+  task: string,
+  regime: RegimeName,
+  controller: Controller,
+  seed: number,
+  options: ResetOptions = {},
+  suite = "live",
+): Episode {
   const env = new HummingbirdEnv(task, regime);
-  let obs = env.reset(seed);
+  let obs = env.reset(seed, options);
   controller.reset();
   const f: Episode["frames"] = { t: [], pos: [], quat: [], vel: [], action: [], thrust: [], wind: [], target: [], hold: [], distance: [] };
   const record = () => {
@@ -64,7 +75,7 @@ export function simulateEpisode(task: string, regime: RegimeName, controller: Co
         task,
         seed,
         policy: controller.name,
-        suite: "live",
+        suite,
         dt: env.p.dt * env.p.action_repeat,
         scene: env.scene,
         conditions: { ...c, damage: [...c.damage] as [number, number] },
