@@ -1,0 +1,13 @@
+# Test evaluation of saturday.yaml's six runs (launch once they have all finished).
+#
+#     uv run python scripts/launch.py configs/experiments/eval_saturday.yaml --parallel 6
+#
+# Then rebuild results/eval/all_results.csv with scripts/eval_summary.py.
+script: scripts/evaluate.py
+jobs:
+  - --policy ppo_hover_norewnorm_s1 --suites test
+  - --policy ppo_hover_norewnorm_s2 --suites test
+  - --policy ppo_hover_norewnorm_s3 --suites test
+  - --policy ppo_hover_norewnorm_noadvnorm_s1 --suites test
+  - --policy ppo_hover_norewnorm_noadvnorm_s2 --suites test
+  - --policy ppo_hover_norewnorm_noadvnorm_s3 --suites test

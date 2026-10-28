@@ -1,0 +1,18 @@
+# Test evaluation of saturday2.yaml's six runs, final model and best checkpoint (launch once all
+# six have finished), then rebuild results/eval/all_results.csv with scripts/eval_summary.py.
+#
+#     uv run python scripts/launch.py configs/experiments/eval_saturday2.yaml --parallel 6
+script: scripts/evaluate.py
+jobs:
+  - --policy sac_hover_annealed_s1 --suites test
+  - --policy sac_hover_annealed_s2 --suites test
+  - --policy sac_hover_annealed_s3 --suites test
+  - --policy td3_hover_annealed_s1 --suites test
+  - --policy td3_hover_annealed_s2 --suites test
+  - --policy td3_hover_annealed_s3 --suites test
+  - --policy sac_hover_annealed_s1 --which best --suites test
+  - --policy sac_hover_annealed_s2 --which best --suites test
+  - --policy sac_hover_annealed_s3 --which best --suites test
+  - --policy td3_hover_annealed_s1 --which best --suites test
+  - --policy td3_hover_annealed_s2 --which best --suites test
+  - --policy td3_hover_annealed_s3 --which best --suites test

@@ -1,0 +1,17 @@
+# Saturday: does the late degradation of SAC and TD3 on hover come from their constant learning rate?
+#
+#     uv run python scripts/launch.py configs/experiments/saturday2.yaml --parallel 6
+#
+# All four off-policy configurations on hover peak and then decay (SAC final 64% vs 99% for its
+# best checkpoint), while PPO, whose learning rate decreases linearly to 0, does not. Here SAC and
+# TD3 are trained exactly as in E1 (normal conditions, 0.5M steps, same devices), except that their
+# learning rate also decreases linearly to 0. If the hypothesis holds, the final models stay close
+# to the best checkpoints. About 3 h for SAC, 1.5 h for TD3, with 6 jobs at once.
+common: --wandb
+jobs:
+  - --algo sac --task hover --steps 5e5 --device cpu --set anneal_lr=true --seed 1 --name sac_hover_annealed_s1 --group e4_ablations
+  - --algo sac --task hover --steps 5e5 --device cpu --set anneal_lr=true --seed 2 --name sac_hover_annealed_s2 --group e4_ablations
+  - --algo sac --task hover --steps 5e5 --device cpu --set anneal_lr=true --seed 3 --name sac_hover_annealed_s3 --group e4_ablations
+  - --algo td3 --task hover --steps 5e5 --device cuda --set anneal_lr=true --seed 1 --name td3_hover_annealed_s1 --group e4_ablations
+  - --algo td3 --task hover --steps 5e5 --device cuda --set anneal_lr=true --seed 2 --name td3_hover_annealed_s2 --group e4_ablations
+  - --algo td3 --task hover --steps 5e5 --device cuda --set anneal_lr=true --seed 3 --name td3_hover_annealed_s3 --group e4_ablations

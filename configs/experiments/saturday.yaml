@@ -1,0 +1,17 @@
+# Saturday: is advantage normalisation useless only because the rewards are already normalised?
+#
+#     uv run python scripts/launch.py configs/experiments/saturday.yaml --parallel 6
+#
+# In E4, PPO hover without advantage normalisation did as well as the full PPO (99% vs 98%).
+# Our guess: VecNormalize already divides the rewards by the spread of the returns, so the
+# advantages are of order one anyway and normalising them changes nothing. If that is right,
+# then WITHOUT reward normalisation, switching advantage normalisation off should hurt.
+# Two variants x 3 seeds, same budget as E1 hover (1M steps): about 25 min with 6 at once.
+common: --wandb
+jobs:
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false --seed 1 --name ppo_hover_norewnorm_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false --seed 2 --name ppo_hover_norewnorm_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false --seed 3 --name ppo_hover_norewnorm_s3 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false normalize_advantage=false --seed 1 --name ppo_hover_norewnorm_noadvnorm_s1 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false normalize_advantage=false --seed 2 --name ppo_hover_norewnorm_noadvnorm_s2 --group e4_ablations
+  - --algo ppo --task hover --steps 1e6 --set normalize_reward=false normalize_advantage=false --seed 3 --name ppo_hover_norewnorm_noadvnorm_s3 --group e4_ablations
