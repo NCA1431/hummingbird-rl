@@ -1,0 +1,15 @@
+% LaTeX settings for docs/algorithms_report.pdf (see the build command at the top of algorithms_report.md).
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize\setlength{\tabcolsep}{4pt}}
+\usepackage{needspace}
+\usepackage{titlesec}
+\titleformat{\section}{\needspace{14\baselineskip}\large\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{12pt}{4pt}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=3pt}
+\usepackage{float}
+\floatplacement{figure}{H}
+\setlength{\emergencystretch}{2em}
+\setkeys{Gin}{width=0.76\linewidth,keepaspectratio}
