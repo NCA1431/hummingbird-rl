@@ -13,10 +13,10 @@ follow a course.
 browser, with every controller of this report) · [code on GitHub](https://github.com/NCA1431/hummingbird-rl)
 · [the algorithms explained (PDF)](https://github.com/NCA1431/hummingbird-rl/blob/main/docs/algorithms_report.pdf)
 
-*How this was built: this is a learning project. I chose the subject, defined the tasks and the
-experiments, ran every training and evaluation on my own computer and interpreted the results. Claude
-(Anthropic) wrote most of the code and drafted most of the text under my direction. The appendix says what
-I did, what I learned and what I would do differently.*
+*I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
+on my own computer, and interpreted the results. I used Claude (Anthropic) as a tool to write most of the
+code and to draft the text, which I reviewed and corrected. The end of the report says how the work was
+shared and what I learned.*
 
 > **Key findings**
 > - **Classical control is hard to beat in calm air.** PID and LQR succeed in 100% of the hover and go-to-point tests, and the PID, thanks to its integrators, is the most robust controller to wind and wing damage (robust area 0.82 out of 1).
@@ -212,6 +212,9 @@ drag asymmetry: head-first flight costs half the drag. They also turn when the t
 
 <!-- panels: e1b -->
 
+In the episode chart, each dot is one test episode: hover it for its details, click a controller in the
+legend to show it alone. A bird that turns to face its target lands on the dashed diagonal.
+
 **Caveat:** SAC's turn follows the target's bearing, as a bird facing its goal would; PPO's and TD3's turns
 follow other patterns that we have not yet analysed episode by episode.
 
@@ -225,6 +228,9 @@ action; it has no integral of the error, and the wind is not in the observation.
 
 <!-- panels: e2_area -->
 <!-- panels: e2_heatmaps -->
+
+Each cell is the success over 20 episodes, averaged over the seeds: hover it for the exact value. On
+hover, SAC and TD3 are shown at their best checkpoint, since their final models degrade (see below).
 
 **Randomised training fixes most of it, at almost no cost.** Trained with random wind, mass and damage,
 PPO's robust area rises from 0.39 to 0.79 on hover and from 0.36 to 0.96 on go-to-point, better than the
@@ -389,26 +395,41 @@ explicit rotation step diverges; this never happens in an episode, which stops a
 evaluated controller has one run in the group `results`, with its scores as summary metrics, tagged with
 the experiments it belongs to.
 
-**How this project was built.** I chose this subject because I love hummingbirds, and I wanted to learn reinforcement learning on a
-problem I cared about. I defined the tasks, the experiments and the comparisons, chose between the options
-at each step, ran every training and evaluation on my own computer and interpreted the results. Claude
-(Anthropic) wrote most of the code (the simulator, the training and evaluation pipeline, the web demo) and
-drafted most of the text of both reports, which I questioned and edited. I studied the simulator, the
-tasks and the algorithms in depth; the rest of the code (evaluation, export, the web demo) I reviewed at
-the level of what each part takes in, what it returns and why. The air simulation of the demo is a port
-of a Stable Fluids solver I had written earlier in C++.
+**How this project was built.** Hummingbirds fascinate me: they are beautiful, their flight is both
+graceful and remarkably precise, and they are the only birds that can hover for long, fly backwards and turn
+on the spot. I wanted to learn reinforcement learning on a problem I cared about. I defined the tasks, the
+experiments and the comparisons, chose between the options at each step, ran every training and evaluation
+on my own computer and interpreted the results. I used Claude (Anthropic) to write most of the code (the
+simulator, the training and evaluation pipeline, the web demo) and to draft the text of both reports from my
+results, which I reviewed, questioned and corrected. I studied the simulator, the tasks, the classical
+controllers and the learning algorithms closely, and the training setup, the configurations, the evaluation
+suites, the analysis and the tests in less depth. The rest (the export to the browser, the scripts and the
+web demo) I checked from the outside: what each part takes in, what it returns and why.
 
-**What I learned.** How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for its own model.
-How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters matter: on this
-bird, clipping and the GAE λ decide between success and failure, advantage normalisation changes
-nothing, and the off-policy agents must be chosen on validation. And how to compare learned and classical
-controllers fairly: the same held-out episodes, several seeds, intervals rather than single numbers.
+**A first attempt.** This is my second version of the project. During the summer holidays I spent three
+weeks on a first hummingbird simulation, also built with AI assistance, set in a much more complex world and
+with a large part written in C++: a physics engine in C++, linked to Python for the learning (I got this
+bridge between the two languages working), and three 3D viewers, about 15,000 lines of C++ in all. It grew
+too large to finish, and reviewing it showed me why. The pieces never came together, some tasks did not test
+what they claimed (a 30-line hand-written controller already solved most of one), and the C++ engine was not
+the bottleneck: physics took only about 28% of the training time. So I started again, smaller, in Python,
+with classical baselines from the start.
 
-**What I would do differently.** The project I planned was too ambitious to build alone at this stage: it combines flight
-physics, control engineering, mathematics and a large codebase. Starting with a simpler problem would have
-been the better way to learn RL. This one taught me how much scoping matters, and that a good scope needs
-a real understanding of the problem and of the tools it will use. My next project is to implement PPO from
-scratch.
+**What I learned.** Some flight physics, at the level of a simplified model: how the wingbeat frequency,
+the amplitude of each wing and the tilt of the stroke planes produce the lift and the rolling, pitching
+and yawing torques that steer the bird, and why hovering is unstable. How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for
+its own model. How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters
+matter: on this bird, clipping and the GAE λ decide between success and failure, advantage normalisation
+changes nothing, and the off-policy agents must be chosen on validation. And how to compare learned and
+classical controllers fairly: the same held-out episodes, several seeds, intervals rather than single
+numbers.
+
+**What I would do differently.** Even in its second version, the project combines flight physics, fluid
+dynamics, rigid-body mechanics, control theory, reinforcement learning, statistics, numerical methods and a
+large codebase with a 3D web application: too much to master alone at this stage. Starting with a simpler
+problem would have been the better way to learn RL. But it taught me how much scoping matters, and that a
+good scope needs a real understanding of the problem and of the tools it will use, which I only gained by
+trying. My next project is to implement PPO from scratch.
 
 **Credits.** Wing kinematics: Song, Tobalske, Powers, Hedrick and Luo (2016), Dryad dataset
 doi:10.5061/dryad.8ch1b. 3D model: "Animated Hovering Flying Hummingbird Loop" by LasquetiSpice

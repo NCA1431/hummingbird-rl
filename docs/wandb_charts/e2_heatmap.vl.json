@@ -1,0 +1,151 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+  "description": "E2: success over wind x wing damage, mean over seeds (table grid_mean of the run 'results tables'). One row per controller, hover and go-to-point side by side; on hover, SAC and TD3 are their best checkpoints. Hover a cell for its value.",
+  "data": {
+    "name": "wandb"
+  },
+  "transform": [
+    {
+      "filter": "(datum.task == 'hover' && indexof(['PID', 'LQR', 'PPO normal', 'PPO randomised', 'SAC randomised (best)', 'TD3 randomised (best)'], datum.controller) >= 0) || (datum.task == 'goto' && indexof(['PID', 'LQR', 'PPO normal', 'PPO randomised', 'SAC randomised', 'TD3 randomised'], datum.controller) >= 0)"
+    },
+    {
+      "calculate": "replace(datum.controller, ' (best)', '')",
+      "as": "column"
+    },
+    {
+      "calculate": "datum.task == 'hover' ? 'Hover' : 'Go-to-point'",
+      "as": "task name"
+    },
+    {
+      "calculate": "format(datum.success_rate * 100, '.0f')",
+      "as": "label"
+    }
+  ],
+  "facet": {
+    "row": {
+      "field": "column",
+      "type": "nominal",
+      "title": null,
+      "sort": [
+        "PID",
+        "LQR",
+        "PPO normal",
+        "PPO randomised",
+        "SAC randomised",
+        "TD3 randomised"
+      ],
+      "header": {
+        "labelAngle": 0,
+        "labelAlign": "left",
+        "labelFontSize": 11,
+        "labelFontWeight": "bold"
+      }
+    },
+    "column": {
+      "field": "task name",
+      "type": "nominal",
+      "title": null,
+      "sort": [
+        "Hover",
+        "Go-to-point"
+      ],
+      "header": {
+        "labelFontSize": 12,
+        "labelFontWeight": "bold"
+      }
+    }
+  },
+  "spec": {
+    "width": 95,
+    "height": 95,
+    "encoding": {
+      "x": {
+        "field": "wind_pct",
+        "type": "ordinal",
+        "title": "wind (% of weight)"
+      },
+      "y": {
+        "field": "damage_pct",
+        "type": "ordinal",
+        "sort": "descending",
+        "title": "wing force lost (%)"
+      }
+    },
+    "layer": [
+      {
+        "mark": {
+          "type": "rect"
+        },
+        "encoding": {
+          "color": {
+            "field": "success_rate",
+            "type": "quantitative",
+            "title": "success",
+            "scale": {
+              "domain": [
+                0,
+                1
+              ],
+              "scheme": "blues"
+            },
+            "legend": null
+          },
+          "tooltip": [
+            {
+              "field": "controller",
+              "type": "nominal"
+            },
+            {
+              "field": "task name",
+              "type": "nominal",
+              "title": "task"
+            },
+            {
+              "field": "wind_pct",
+              "type": "quantitative",
+              "title": "wind (% of weight)"
+            },
+            {
+              "field": "damage_pct",
+              "type": "quantitative",
+              "title": "wing force lost (%)"
+            },
+            {
+              "field": "success_rate",
+              "type": "quantitative",
+              "format": ".0%",
+              "title": "success"
+            },
+            {
+              "field": "seeds",
+              "type": "quantitative",
+              "title": "seeds averaged"
+            }
+          ]
+        }
+      },
+      {
+        "mark": {
+          "type": "text",
+          "fontSize": 8.5
+        },
+        "encoding": {
+          "text": {
+            "field": "label"
+          },
+          "color": {
+            "condition": {
+              "test": "datum.success_rate > 0.55",
+              "value": "white"
+            },
+            "value": "#2b2a27"
+          }
+        }
+      }
+    ]
+  },
+  "spacing": {
+    "row": 12,
+    "column": 16
+  }
+}

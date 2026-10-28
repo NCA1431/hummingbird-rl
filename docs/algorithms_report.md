@@ -19,9 +19,10 @@ implementation that computes it, the Stable-Baselines3 (SB3) setting that contro
 one, the ablation that shows what it does on our bird. The full experimental results are in the W&B
 report; here they serve as evidence for how the algorithms work.
 
-*How this was built: this is a learning project. I chose the subject, defined the tasks and the
-experiments, ran every training and evaluation on my own computer and interpreted the results. Claude
-(Anthropic) wrote most of the code and drafted most of this report under my direction (details at the end).*
+*I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
+on my own computer, and interpreted the results. I used Claude (Anthropic) as a tool to write most of the
+code and to draft the text, which I reviewed and corrected. The end of the report says how the work was
+shared and what I learned.*
 
 **Key findings.**
 
@@ -489,43 +490,58 @@ reach it.](figures/e4_ablations.png)
 - Andrychowicz M. et al. (2021). What matters in on-policy reinforcement learning? A large-scale empirical study. *ICLR*.
 - Bryson A. E., Ho Y.-C. (1975). *Applied Optimal Control*. Hemisphere.
 - Engstrom L. et al. (2020). Implementation matters in deep policy gradients: a case study on PPO and TRPO. *ICLR*.
-- Fujimoto S., van Hoof H., Meger D. (2018). Addressing function approximation error in actor-critic methods. *ICML*.
-- Haarnoja T., Zhou A., Abbeel P., Levine S. (2018a). Soft Actor-Critic: off-policy maximum entropy deep reinforcement learning with a stochastic actor. *ICML*.
+- Fujimoto S. et al. (2018). Addressing function approximation error in actor-critic methods. *ICML*.
+- Haarnoja T. et al. (2018a). Soft Actor-Critic: off-policy maximum entropy deep reinforcement learning with a stochastic actor. *ICML*.
 - Haarnoja T. et al. (2018b). Soft Actor-Critic algorithms and applications. arXiv:1812.05905.
 - Huang S. et al. (2022a). CleanRL: high-quality single-file implementations of deep reinforcement learning algorithms. *JMLR* 23(274). Line numbers refer to commit `fe8d8a0` (April 2026).
 - Huang S. et al. (2022b). The 37 implementation details of Proximal Policy Optimization. *ICLR Blog Track*.
 - Kingma D. P., Ba J. (2015). Adam: a method for stochastic optimization. *ICLR*.
-- Khatib O. (1986). Real-time obstacle avoidance for manipulators and mobile robots. *International Journal of Robotics Research* 5(1).
+- Khatib O. (1986). Real-time obstacle avoidance for manipulators and mobile robots. *Int. J. Robotics Research* 5(1).
 - Koren Y., Borenstein J. (1991). Potential field methods and their inherent limitations for mobile robot navigation. *ICRA*.
 - Lillicrap T. et al. (2016). Continuous control with deep reinforcement learning. *ICLR*.
 - Mnih V. et al. (2015). Human-level control through deep reinforcement learning. *Nature* 518.
-- Ng A. Y., Harada D., Russell S. (1999). Policy invariance under reward transformations: theory and application to reward shaping. *ICML*.
-- Pardo F., Tavakoli A., Levdik V., Kormushev P. (2018). Time limits in reinforcement learning. *ICML*.
+- Ng A. Y. et al. (1999). Policy invariance under reward transformations: theory and application to reward shaping. *ICML*.
+- Pardo F. et al. (2018). Time limits in reinforcement learning. *ICML*.
 - Raffin A. et al. (2021). Stable-Baselines3: reliable reinforcement learning implementations. *JMLR* 22(268).
-- Schulman J., Moritz P., Levine S., Jordan M., Abbeel P. (2016). High-dimensional continuous control using generalized advantage estimation. *ICLR*.
-- Schulman J., Wolski F., Dhariwal P., Radford A., Klimov O. (2017). Proximal policy optimization algorithms. arXiv:1707.06347.
+- Schulman J. et al. (2016). High-dimensional continuous control using generalized advantage estimation. *ICLR*.
+- Schulman J. et al. (2017). Proximal policy optimization algorithms. arXiv:1707.06347.
 - Sutton R. S., Barto A. G. (2018). *Reinforcement Learning: An Introduction*, 2nd edition. MIT Press.
-- Sutton R. S., McAllester D., Singh S., Mansour Y. (2000). Policy gradient methods for reinforcement learning with function approximation. *NeurIPS* 12.
+- Sutton R. S. et al. (2000). Policy gradient methods for reinforcement learning with function approximation. *NeurIPS* 12.
 - Tobin J. et al. (2017). Domain randomization for transferring deep neural networks from simulation to the real world. *IROS*.
 - Williams R. J. (1992). Simple statistical gradient-following algorithms for connectionist reinforcement learning. *Machine Learning* 8.
 
-**How this project was built.** I chose this subject because I love hummingbirds, and I wanted to learn reinforcement learning on a
-problem I cared about. I defined the tasks, the experiments and the comparisons, chose between the options
-at each step, ran every training and evaluation on my own computer and interpreted the results. Claude
-(Anthropic) wrote most of the code (the simulator, the training and evaluation pipeline, the web demo) and
-drafted most of the text of both reports, which I questioned and edited. I studied the simulator, the
-tasks and the algorithms in depth; the rest of the code (evaluation, export, the web demo) I reviewed at
-the level of what each part takes in, what it returns and why. The air simulation of the demo is a port
-of a Stable Fluids solver I had written earlier in C++.
+**How this project was built.** Hummingbirds fascinate me: they are beautiful, their flight is both
+graceful and remarkably precise, and they are the only birds that can hover for long, fly backwards and turn
+on the spot. I wanted to learn reinforcement learning on a problem I cared about. I defined the tasks, the
+experiments and the comparisons, chose between the options at each step, ran every training and evaluation
+on my own computer and interpreted the results. I used Claude (Anthropic) to write most of the code (the
+simulator, the training and evaluation pipeline, the web demo) and to draft the text of both reports from my
+results, which I reviewed, questioned and corrected. I studied the simulator, the tasks, the classical
+controllers and the learning algorithms closely, and the training setup, the configurations, the evaluation
+suites, the analysis and the tests in less depth. The rest (the export to the browser, the scripts and the
+web demo) I checked from the outside: what each part takes in, what it returns and why.
 
-**What I learned.** How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for its own model.
-How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters matter: on this
-bird, clipping and the GAE $\lambda$ decide between success and failure, advantage normalisation changes
-nothing, and the off-policy agents must be chosen on validation. And how to compare learned and classical
-controllers fairly: the same held-out episodes, several seeds, intervals rather than single numbers.
+**A first attempt.** This is my second version of the project. During the summer holidays I spent three
+weeks on a first hummingbird simulation, also built with AI assistance, set in a much more complex world and
+with a large part written in C++: a physics engine in C++, linked to Python for the learning (I got this
+bridge between the two languages working), and three 3D viewers, about 15,000 lines of C++ in all. It grew
+too large to finish, and reviewing it showed me why. The pieces never came together, some tasks did not test
+what they claimed (a 30-line hand-written controller already solved most of one), and the C++ engine was not
+the bottleneck: physics took only about 28% of the training time. So I started again, smaller, in Python,
+with classical baselines from the start.
 
-**What I would do differently.** The project I planned was too ambitious to build alone at this stage: it combines flight
-physics, control engineering, mathematics and a large codebase. Starting with a simpler problem would have
-been the better way to learn RL. This one taught me how much scoping matters, and that a good scope needs
-a real understanding of the problem and of the tools it will use. My next project is to implement PPO from
-scratch.
+**What I learned.** Some flight physics, at the level of a simplified model: how the wingbeat frequency,
+the amplitude of each wing and the tilt of the stroke planes produce the lift and the rolling, pitching
+and yawing torques that steer the bird, and why hovering is unstable. How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for
+its own model. How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters
+matter: on this bird, clipping and the GAE $\lambda$ decide between success and failure, advantage normalisation
+changes nothing, and the off-policy agents must be chosen on validation. And how to compare learned and
+classical controllers fairly: the same held-out episodes, several seeds, intervals rather than single
+numbers.
+
+**What I would do differently.** Even in its second version, the project combines flight physics, fluid
+dynamics, rigid-body mechanics, control theory, reinforcement learning, statistics, numerical methods and a
+large codebase with a 3D web application: too much to master alone at this stage. Starting with a simpler
+problem would have been the better way to learn RL. But it taught me how much scoping matters, and that a
+good scope needs a real understanding of the problem and of the tools it will use, which I only gained by
+trying. My next project is to implement PPO from scratch.

@@ -1,0 +1,195 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+  "description": "E1b: one dot per go-to-point test episode (table behaviour/turn_vs_bearing_table of each run). Click a controller in the legend to isolate it; hover a dot for the episode.",
+  "data": {
+    "name": "wandb"
+  },
+  "width": 470,
+  "height": 330,
+  "transform": [
+    {
+      "calculate": "datum.success ? 'reached' : 'failed'",
+      "as": "outcome"
+    },
+    {
+      "calculate": "datum.turned ? 'yes' : 'no'",
+      "as": "turned to face it"
+    }
+  ],
+  "layer": [
+    {
+      "data": {
+        "values": [
+          {
+            "b": -180,
+            "t": -180
+          },
+          {
+            "b": 180,
+            "t": 180
+          }
+        ]
+      },
+      "mark": {
+        "type": "line",
+        "strokeDash": [
+          4,
+          4
+        ],
+        "color": "#9a9893",
+        "strokeWidth": 1
+      },
+      "encoding": {
+        "x": {
+          "field": "b",
+          "type": "quantitative"
+        },
+        "y": {
+          "field": "t",
+          "type": "quantitative"
+        }
+      }
+    },
+    {
+      "selection": {
+        "pick": {
+          "type": "multi",
+          "fields": [
+            "controller"
+          ],
+          "bind": "legend"
+        }
+      },
+      "mark": {
+        "type": "point",
+        "filled": true,
+        "size": 30
+      },
+      "encoding": {
+        "x": {
+          "field": "bearing_deg",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              -180,
+              180
+            ]
+          },
+          "axis": {
+            "values": [
+              -180,
+              -90,
+              0,
+              90,
+              180
+            ]
+          },
+          "title": "target bearing at the start (\u00b0): 0 ahead, \u00b1180 behind"
+        },
+        "y": {
+          "field": "net_turn_deg",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              -180,
+              180
+            ]
+          },
+          "axis": {
+            "values": [
+              -180,
+              -90,
+              0,
+              90,
+              180
+            ]
+          },
+          "title": "net turn of the bird (\u00b0)"
+        },
+        "color": {
+          "field": "controller",
+          "type": "nominal",
+          "scale": {
+            "domain": [
+              "PPO normal",
+              "SAC normal",
+              "TD3 normal",
+              "PID",
+              "LQR"
+            ],
+            "range": [
+              "#2a78d6",
+              "#eb6834",
+              "#1baf7a",
+              "#52514e",
+              "#8c8a83"
+            ]
+          },
+          "legend": {
+            "title": "controller (click)"
+          }
+        },
+        "shape": {
+          "field": "outcome",
+          "type": "nominal",
+          "scale": {
+            "domain": [
+              "reached",
+              "failed"
+            ],
+            "range": [
+              "circle",
+              "cross"
+            ]
+          }
+        },
+        "opacity": {
+          "condition": {
+            "selection": "pick",
+            "value": 0.75
+          },
+          "value": 0.04
+        },
+        "tooltip": [
+          {
+            "field": "controller",
+            "type": "nominal"
+          },
+          {
+            "field": "bearing_deg",
+            "type": "quantitative",
+            "format": ".0f",
+            "title": "bearing (\u00b0)"
+          },
+          {
+            "field": "net_turn_deg",
+            "type": "quantitative",
+            "format": ".0f",
+            "title": "net turn (\u00b0)"
+          },
+          {
+            "field": "turned to face it",
+            "type": "nominal"
+          },
+          {
+            "field": "outcome",
+            "type": "nominal"
+          },
+          {
+            "field": "time_s",
+            "type": "quantitative",
+            "format": ".2f",
+            "title": "time (s)"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "legend": {
+      "orient": "bottom",
+      "direction": "horizontal",
+      "columns": 3
+    }
+  }
+}

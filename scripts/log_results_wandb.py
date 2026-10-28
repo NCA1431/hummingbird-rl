@@ -295,7 +295,9 @@ def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: 
             points += len(rows)
         b = item["behaviour"]
         if b is not None:
-            table = wandb.Table(dataframe=plain(b[["bearing_deg", "net_turn_deg", "turned", "success"]]))
+            # the controller in every row too, so that a chart over several runs can colour by it
+            columns = ["bearing_deg", "net_turn_deg", "turned", "success", "time_s"]
+            table = wandb.Table(dataframe=plain(b[columns].assign(controller=item["config"]["controller"])))
             title = f"{item['config']['controller']}: net turn vs target bearing"
             scatter = wandb.plot.scatter(table, "bearing_deg", "net_turn_deg", title=title)
             run.log({"behaviour/turn_vs_bearing": scatter})

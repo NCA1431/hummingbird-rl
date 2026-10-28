@@ -3,15 +3,19 @@
     uv run python scripts/make_report_wandb.py --dry-run     # check everything, send nothing
     uv run python scripts/make_report_wandb.py               # create the report, print its link
     uv run python scripts/make_report_wandb.py --url <link>  # rebuild that report in place
+    uv run python scripts/make_report_wandb.py --show <link> # list the custom charts of a report
 
 The text lives in docs/wandb_report.md so that it can be edited and versioned like the code. There,
 "#" lines become headings, a paragraph between two `$$` lines a LaTeX block (W&B's Markdown blocks
 do not render equations), the other paragraphs Markdown blocks, `<!-- toc -->` the table of contents,
 and each `<!-- panels: name -->` the charts defined below under that name. The charts read the runs
 logged by scripts/log_results_wandb.py: one run per controller and task in the group "results"
-(scores, sweeps, learning curves, tagged E1 ... E5) and one run "results tables" holding the figures
-W&B cannot draw (the wind x damage heatmaps, the E1b scatter, E6). Run that script first, with
---replace, so that the report sees the latest results.
+(scores, sweeps, learning curves, tagged E1 ... E5) and one run "results tables" holding the tables
+and the figures W&B cannot draw (E6). The E1b episodes and the E2 heatmaps are custom charts: our
+Vega-Lite specs of docs/wandb_charts/, saved in W&B as hummingbird-e1b-scatter and
+hummingbird-e2-heatmap. W&B's chart list shows the names, but a report needs the id W&B stored, which
+for the heatmap begins with an underscore: --show prints the ids of a report's custom charts.
+Run log_results_wandb.py first, with --replace, so that the report sees the latest results.
 
 Each chart groups the runs by config.controller ("PPO normal", "SAC randomised (best)", "PID"...), which
 gives the mean over seeds and the range of the seeds as a band, like the PNG figures, and the colours
@@ -25,7 +29,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "wandb_report.md"
@@ -79,6 +83,14 @@ def charts(wr, ex, entity: str, project: str) -> dict:
                  for k in keys]
         return grid(runset(name, group="results_tables", by_label=False), *shown, hide=True)
 
+    def custom(title, table, preset, fields, w=24, h=12):
+        """A custom chart: a W&B table drawn by a Vega-Lite spec saved in W&B under the name `preset`.
+        Ours are versioned in docs/wandb_charts/ and saved once by hand in W&B's chart editor (Save as,
+        publicly accessible), since the API can use a saved chart but not create one. They read the
+        table's columns by name, so they need no field mapping."""
+        return wr.CustomChart(query={"summaryTable": {"tableKey": table}}, chart_name=preset, chart_fields=fields,
+                              chart_strings={"title": title}, layout=wr.Layout(w=w, h=h))
+
     task = lambda t: ex.Config("task") == t          # noqa: E731
     tag = lambda e: ex.Tags().isin([e])              # noqa: E731
     learning = lambda title: line(title, "val/env_steps", "val/success_rate", "environment steps",  # noqa: E731
@@ -94,12 +106,16 @@ def charts(wr, ex, entity: str, project: str) -> dict:
                        bar("Target behind: episodes where the bird turned", "behaviour/p_turn_target_behind"),
                        bar("Target behind: share of the transit flown head-first", "behaviour/forward_target_behind"),
                        bar("Target ahead: episodes where the bird turned", "behaviour/p_turn_target_ahead")),
-                  images("E1b figure", "figures/e1b_behaviour", h=9)]
+                  grid(runset("E1b episodes", task("goto"), tag("E1b"), by_label=False),
+                       custom("Go-to-point: net turn vs target bearing, one dot per test episode",
+                              "behaviour/turn_vs_bearing_table", f"{entity}/hummingbird-e1b-scatter", {}, h=13))]
     out["e2_area"] = [grid(runset(f"E2 {names[t]}", task(t), tag("E2")),
                            bar(f"{names[t]}: robust area (whole grid)", "grid/robust_area", w=12),
                            bar(f"{names[t]}: robust area, winds within the training range",
                                "grid/robust_area_trained_range", w=12)) for t in ("hover", "goto")]
-    out["e2_heatmaps"] = [images("E2 heatmaps", "figures/e2_heatmaps", h=16)]
+    out["e2_heatmaps"] = [grid(runset("E2 grid", group="results_tables", by_label=False),
+                               custom("Success over wind x wing damage (mean over seeds)", "grid_mean",
+                                      f"{entity}/_hummingbird-e2-heatmap", {}, h=20), hide=True)]
     out["e2_sweeps"] = [grid(runset(f"E2 sweeps {names[t]}", task(t), tag("E2")),
                              line(f"{names[t]}: success vs wind (mean over damage levels)", "wind/wind_pct",
                                   "wind/success", "wind (% of the weight)", "success", w=8),
@@ -137,6 +153,7 @@ def charts(wr, ex, entity: str, project: str) -> dict:
                       learning("Navigation: from scratch vs from the Obstacles agent"),
                       bar("Navigation: test success", "test/success_rate"))]
     out["e6"] = [images("E6 figures", "figures/e6_value_landscape", "figures/e6_vector_field", h=10)]
+
     return out
 
 
@@ -144,10 +161,33 @@ def report_link(url: str) -> str:
     """The link in the form the W&B library reads: .../entity/project/reports/title--id. Only the id
     at the end is used. Links on W&B's newer address (forge.coreweave.com/wandb/...) have one more
     part in front, which the library cannot split, so we keep the last four parts only."""
-    parts = urlparse(url).path.strip("/").split("/")
+    link = urlparse(url)
+    parts = link.path.strip("/").split("/")
+    if parts and parts[-1] == "edit":
+        # the link of a report open in W&B's editor: .../title--id/edit?draftId=<draft id>. The draft is
+        # what the editor shows (not yet published), so we read that one.
+        parts = parts[:-1]
+        draft = parse_qs(link.query).get("draftId")
+        if draft and "--" in parts[-1]:
+            parts[-1] = parts[-1].rsplit("--", 1)[0] + "--" + draft[0].rstrip("=")
     if len(parts) < 4 or parts[-2] != "reports" or "--" not in parts[-1]:
         sys.exit(f"this does not look like the link of a W&B report: {url}")
     return "https://wandb.ai/" + "/".join(parts[-4:])
+
+
+def show_custom_charts(report, wr) -> None:
+    """Print the custom charts of a report as W&B stores them: the name of the chart definition
+    (a preset saved in W&B, or one of its own such as wandb/scatter/v0), the table it reads and the
+    field mapping. This is how we learn the name W&B gave a preset saved in its chart editor."""
+    found = 0
+    for block in report.blocks:
+        for panel in getattr(block, "panels", []) if isinstance(block, wr.PanelGrid) else []:
+            if isinstance(panel, wr.CustomChart):
+                found += 1
+                table = panel.query.get("summaryTable", {}).get("tableKey", panel.query)
+                print(f"chart {found}: definition {panel.chart_name!r}, table {table!r}, fields {panel.chart_fields}")
+    if not found:
+        print("no custom chart in this report")
 
 
 # --- The text --------------------------------------------------------------------------------
@@ -201,10 +241,15 @@ def main() -> None:
     ap.add_argument("--entity", default=None, help="W&B user or team (default: the one you are logged in as)")
     ap.add_argument("--url", default=None, help="an existing report to rebuild in place, instead of a new one")
     ap.add_argument("--dry-run", action="store_true", help="build and check the report without W&B")
+    ap.add_argument("--show", default=None, metavar="LINK", help="only list the custom charts of that report")
     args = ap.parse_args()
 
     import wandb_workspaces.expr as ex
     import wandb_workspaces.reports.v2 as wr
+
+    if args.show:
+        show_custom_charts(wr.Report.from_url(report_link(args.show)), wr)
+        return
 
     if args.dry_run:
         # Converting run sets asks W&B for the project's id: answer with a fake one.
