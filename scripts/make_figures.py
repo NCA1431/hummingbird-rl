@@ -382,7 +382,7 @@ def e2_late_degradation(d: Data) -> plt.Figure:
     ax.set_xlim(-0.03, 1.05)
     ax.set_xlabel("test success: last model (open) vs best checkpoint (filled)")
     ax.set_title("Each seed, last vs best")
-    fig.suptitle("E2 · Late degradation of the off-policy agents on hover (constant learning rate)",
+    fig.suptitle("E2 · The off-policy agents on hover: validation success swings during training",
                  x=0.01, ha="left", fontsize=11, fontweight="bold")
     fig.tight_layout()
     return fig
@@ -425,11 +425,16 @@ ABLATIONS = [
     ("ppo_hover_normal", "PPO, as trained", "hover", ALGO["ppo"]),
     ("ppo_hover_noclip", "no clipping", "hover", ALGO_LIGHT["ppo"]),
     ("ppo_hover_noadvnorm", "no advantage normalisation", "hover", ALGO_LIGHT["ppo"]),
+    ("ppo_hover_norewnorm", "no reward normalisation", "hover", ALGO_LIGHT["ppo"]),
+    ("ppo_hover_norewnorm_noadvnorm", "neither normalisation", "hover", ALGO_LIGHT["ppo"]),
     ("ppo_hover_lambda0", "GAE λ = 0", "hover", ALGO_LIGHT["ppo"]),
     ("ppo_hover_lambda1", "GAE λ = 1", "hover", ALGO_LIGHT["ppo"]),
     ("ppo_hover_nohoverinit", "no hover start", "hover", ALGO_LIGHT["ppo"]),
     ("sac_hover_normal", "SAC, learned α", "hover", ALGO["sac"]),
     ("sac_hover_fixedalpha", "SAC, fixed α = 0.2", "hover", ALGO_LIGHT["sac"]),
+    ("sac_hover_annealed", "SAC, annealed learning rate", "hover", ALGO_LIGHT["sac"]),
+    ("td3_hover_normal", "TD3, as trained", "hover", ALGO["td3"]),
+    ("td3_hover_annealed", "TD3, annealed learning rate", "hover", ALGO_LIGHT["td3"]),
     ("ppo_navigation_normal", "PPO navigation", "navigation", ALGO["ppo"]),
     ("ppo_navigation_f50", "failure penalty −50", "navigation", ALGO_LIGHT["ppo"]),
 ]
@@ -447,11 +452,17 @@ def steps_to(c: tuple[np.ndarray, np.ndarray] | None, level: float = 0.9) -> np.
 
 
 def e4_ablations(d: Data) -> plt.Figure:
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
-    ys = np.arange(len(ABLATIONS))[::-1].astype(float)
-    ys[: 6] += 1.0  # gaps between the three groups
-    ys[: 8] += 1.0
-    for y, (group, title, task, color) in zip(ys, ABLATIONS):
+    # Only the variants that were trained and evaluated, in three blocks separated by a gap:
+    # PPO on hover, the off-policy agents on hover, navigation.
+    rows = [a for a in ABLATIONS if d.seeds(a[0], a[2])]
+    block = [2 if task == "navigation" else (0 if group.startswith("ppo") else 1) for group, _, task, _ in rows]
+    ys = np.zeros(len(rows))
+    y = 0.0
+    for k in range(len(rows) - 1, -1, -1):       # from the bottom up
+        ys[k] = y
+        y += 1.0 + (1.0 if k > 0 and block[k - 1] != block[k] else 0.0)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 1.0 + 0.32 * (len(rows) + 2)), sharey=True)
+    for y, (group, title, task, color) in zip(ys, rows):
         v = d.values(group, task, "test/success_rate")
         if len(v):
             axes[0].barh(y, v.mean(), 0.7, color=color, zorder=2)
@@ -472,7 +483,7 @@ def e4_ablations(d: Data) -> plt.Figure:
         elif task != "hover":
             axes[1].annotate("(hover only)", (0, y), xytext=(4, 0), textcoords="offset points", va="center",
                              fontsize=7.5, color=INK_3)
-    axes[0].set_yticks(ys, [a[1] for a in ABLATIONS], fontsize=8)
+    axes[0].set_yticks(ys, [a[1] for a in rows], fontsize=8)
     percent(axes[0], "x")
     axes[0].set_xlim(0, 1.12)
     axes[0].set_title("test success (200 episodes)")
