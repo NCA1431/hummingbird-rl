@@ -13,9 +13,10 @@ follow a course.
 browser, with every controller of this report) · [code on GitHub](https://github.com/NCA1431/hummingbird-rl)
 · [the algorithms explained (PDF)](https://github.com/NCA1431/hummingbird-rl/blob/main/docs/algorithms_report.pdf)
 
-*Built with AI assistance: Claude (Anthropic) wrote most of the code and helped write this report, under
-my direction. I defined the project and the experiments, reviewed the code, ran and analysed every
-experiment (details in the appendix).*
+*How this was built: this is a learning project. I chose the subject, defined the tasks and the
+experiments, ran every training and evaluation on my own computer and interpreted the results. Claude
+(Anthropic) wrote most of the code and drafted most of the text under my direction. The appendix says what
+I did, what I learned and what I would do differently.*
 
 > **Key findings**
 > - **Classical control is hard to beat in calm air.** PID and LQR succeed in 100% of the hover and go-to-point tests, and the PID, thanks to its integrators, is the most robust controller to wind and wing damage (robust area 0.82 out of 1).
@@ -388,11 +389,28 @@ explicit rotation step diverges; this never happens in an episode, which stops a
 evaluated controller has one run in the group `results`, with its scores as summary metrics, tagged with
 the experiments it belongs to.
 
-**Use of AI.** This project was built with Claude (Anthropic) as a coding and writing assistant. Claude
-wrote most of the code (simulator, training and evaluation pipeline, web demo) and drafted most of the
-text of both reports under my direction. I defined the scope, the tasks and the experiments, reviewed
-every file, ran and analysed all the experiments, decided what to test next, and edited the reports.
-Gemini was also used to review drafts of the reports. Wing kinematics: Song, Tobalske, Powers, Hedrick and Luo (2016), Dryad dataset
+**How this project was built.** I chose this subject because I love hummingbirds, and I wanted to learn reinforcement learning on a
+problem I cared about. I defined the tasks, the experiments and the comparisons, chose between the options
+at each step, ran every training and evaluation on my own computer and interpreted the results. Claude
+(Anthropic) wrote most of the code (the simulator, the training and evaluation pipeline, the web demo) and
+drafted most of the text of both reports, which I questioned and edited. I studied the simulator, the
+tasks and the algorithms in depth; the rest of the code (evaluation, export, the web demo) I reviewed at
+the level of what each part takes in, what it returns and why. The air simulation of the demo is a port
+of a Stable Fluids solver I had written earlier in C++.
+
+**What I learned.** How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for its own model.
+How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters matter: on this
+bird, clipping and the GAE λ decide between success and failure, advantage normalisation changes
+nothing, and the off-policy agents must be chosen on validation. And how to compare learned and classical
+controllers fairly: the same held-out episodes, several seeds, intervals rather than single numbers.
+
+**What I would do differently.** The project I planned was too ambitious to build alone at this stage: it combines flight
+physics, control engineering, mathematics and a large codebase. Starting with a simpler problem would have
+been the better way to learn RL. This one taught me how much scoping matters, and that a good scope needs
+a real understanding of the problem and of the tools it will use. My next project is to implement PPO from
+scratch.
+
+**Credits.** Wing kinematics: Song, Tobalske, Powers, Hedrick and Luo (2016), Dryad dataset
 doi:10.5061/dryad.8ch1b. 3D model: "Animated Hovering Flying Hummingbird Loop" by LasquetiSpice
 (Sketchfab), CC BY 4.0.
 

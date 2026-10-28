@@ -19,9 +19,9 @@ implementation that computes it, the Stable-Baselines3 (SB3) setting that contro
 one, the ablation that shows what it does on our bird. The full experimental results are in the W&B
 report; here they serve as evidence for how the algorithms work.
 
-*Use of AI: Claude (Anthropic) wrote most of the code of this project and drafted most of this report,
-under my direction. I defined the project and the experiments, reviewed the code, ran and analysed every
-experiment, and edited the text (details at the end).*
+*How this was built: this is a learning project. I chose the subject, defined the tasks and the
+experiments, ran every training and evaluation on my own computer and interpreted the results. Claude
+(Anthropic) wrote most of the code and drafted most of this report under my direction (details at the end).*
 
 **Key findings.**
 
@@ -509,8 +509,23 @@ reach it.](figures/e4_ablations.png)
 - Tobin J. et al. (2017). Domain randomization for transferring deep neural networks from simulation to the real world. *IROS*.
 - Williams R. J. (1992). Simple statistical gradient-following algorithms for connectionist reinforcement learning. *Machine Learning* 8.
 
-**Use of AI.** This project was built with Claude (Anthropic) as a coding and writing assistant. Claude
-wrote most of the code (simulator, training and evaluation pipeline, web demo) and drafted most of the
-text of this report and of the W&B report under my direction. I defined the scope, the tasks and the
-experiments, reviewed every file, ran and analysed all the experiments, decided what to test next, and
-edited the reports. Gemini was also used to review drafts of the reports.
+**How this project was built.** I chose this subject because I love hummingbirds, and I wanted to learn reinforcement learning on a
+problem I cared about. I defined the tasks, the experiments and the comparisons, chose between the options
+at each step, ran every training and evaluation on my own computer and interpreted the results. Claude
+(Anthropic) wrote most of the code (the simulator, the training and evaluation pipeline, the web demo) and
+drafted most of the text of both reports, which I questioned and edited. I studied the simulator, the
+tasks and the algorithms in depth; the rest of the code (evaluation, export, the web demo) I reviewed at
+the level of what each part takes in, what it returns and why. The air simulation of the demo is a port
+of a Stable Fluids solver I had written earlier in C++.
+
+**What I learned.** How a PID and an LQR stabilise an unstable system, and why the LQR is optimal only for its own model.
+How PPO, TD3 and SAC work, part by part, and which of their components and hyperparameters matter: on this
+bird, clipping and the GAE $\lambda$ decide between success and failure, advantage normalisation changes
+nothing, and the off-policy agents must be chosen on validation. And how to compare learned and classical
+controllers fairly: the same held-out episodes, several seeds, intervals rather than single numbers.
+
+**What I would do differently.** The project I planned was too ambitious to build alone at this stage: it combines flight
+physics, control engineering, mathematics and a large codebase. Starting with a simpler problem would have
+been the better way to learn RL. This one taught me how much scoping matters, and that a good scope needs
+a real understanding of the problem and of the tools it will use. My next project is to implement PPO from
+scratch.
