@@ -6,8 +6,10 @@ filtered and regrouped by the reader, and every point in it leads back to the ru
 it came from. So this script logs one W&B run per controller and task, in the
 group "results":
 
-  config   who it is: controller, algo, task, regime, variant, seed, checkpoint, and
-           `label` ("PPO randomised", "SAC normal (best)", "PID"...), the key to group by
+  config   who it is: algorithm, algo, task, regime, variant, seed, checkpoint, and
+           `controller` ("PPO randomised", "SAC normal (best)", "PID"...), the key to group
+           by (W&B writes the key in front of each legend entry, so we gave it the name
+           a reader expects: "controller: PPO randomised")
   tags     the experiments it takes part in (E1 ... E5), to filter a run set on
   summary  every score of all_results.csv, a few read off the learning curve (steps
            until validation success first reaches 90%, best and final value) and, for
@@ -20,11 +22,13 @@ group "results":
   chart    go-to-point: target bearing vs net turn, one dot per episode (E1b)
 
 and one run in the group "results_tables" with the tables behind all this
-(all_results, the wind x damage grid of every run and its mean per label, the mass
-sweeps, the behaviour episodes), for table panels and custom charts.
+(all_results, the wind x damage grid of every run and its mean per controller, the mass
+sweeps, the behaviour episodes), for table panels and custom charts, and the PNG
+figures of results/figures/ (make_figures.py, interpret.py) for the report's image
+panels: the heatmaps, the E1b scatter and E6, which W&B cannot draw itself.
 
 In the report, a run set filtered on group = results, with its panels grouped by
-config.label, shows the mean over seeds and the range of the seeds as a band: the
+config.controller, shows the mean over seeds and the range of the seeds as a band: the
 same convention as the PNG figures.
 
 The PID and the LQR do not learn. So that they can still be drawn as reference
@@ -65,9 +69,13 @@ VARIANT = {
     "noclip": "no clipping", "noadvnorm": "no advantage normalisation",
     "lambda0": "GAE λ = 0", "lambda1": "GAE λ = 1", "nohoverinit": "no hover start",
     "fixedalpha": "fixed α = 0.2", "f50": "failure penalty −50", "from_obstacles": "from obstacles",
+    "norewnorm": "no reward normalisation", "norewnorm_noadvnorm": "neither normalisation",
+    "annealed": "annealed learning rate",
 }
-ABLATIONS = {("ppo", "hover"): {"normal", "noclip", "noadvnorm", "lambda0", "lambda1", "nohoverinit"},
-             ("sac", "hover"): {"normal", "fixedalpha"}, ("ppo", "navigation"): {"normal", "f50"}}
+ABLATIONS = {("ppo", "hover"): {"normal", "noclip", "noadvnorm", "norewnorm", "norewnorm_noadvnorm", "lambda0",
+                                "lambda1", "nohoverinit"},
+             ("sac", "hover"): {"normal", "fixedalpha", "annealed"}, ("td3", "hover"): {"normal", "annealed"},
+             ("ppo", "navigation"): {"normal", "f50"}}
 REFERENCE = ["success_rate", "mean_return", "final_distance_cm"]  # val/* metrics the PID and LQR get a flat line for
 
 
@@ -85,21 +93,21 @@ def plain(df: pd.DataFrame) -> pd.DataFrame:
 def who(name: str, task: str, train: dict | None) -> dict:
     """The config of a result run, from the controller's name and its training config."""
     if name in ("pid", "lqr"):
-        return {"policy": name, "controller": name.upper(), "algo": name, "kind": "classical", "task": task,
+        return {"policy": name, "algorithm": name.upper(), "algo": name, "kind": "classical", "task": task,
                 "trained_on": None, "variant": "classical", "regime": None, "seed": None, "checkpoint": None,
-                "label": name.upper(), "reference_line": True}
+                "controller": name.upper(), "reference_line": True}
     m = NAME.match(name)
     if m is None:
         raise ValueError(f"cannot read the run name {name!r}")
     algo, trained_on, variant, seed, best = m.groups()
     source = train.get("init_from") if train else None
     return {
-        "policy": name, "controller": ALGO_NAME[algo], "algo": algo, "kind": "rl", "task": task,
+        "policy": name, "algorithm": ALGO_NAME[algo], "algo": algo, "kind": "rl", "task": task,
         "trained_on": trained_on, "variant": variant,
         # finetuned runs were trained normal first, then randomised: their own config says randomised
         "regime": train["regime"] if train else ("randomised" if "randomised" in variant else "normal"),
         "seed": int(seed), "checkpoint": "best" if best else "last",
-        "label": f"{ALGO_NAME[algo]} {VARIANT.get(variant, variant)}" + (" (best)" if best else ""),
+        "controller": f"{ALGO_NAME[algo]} {VARIANT.get(variant, variant)}" + (" (best)" if best else ""),
         "train_run": train["run"] if train else None,
         # a Windows path, written on the training computer: only the run it names is useful here
         "init_from": re.split(r"[\\/]", source)[-2] if isinstance(source, str) and source else None,
@@ -221,7 +229,7 @@ def plan(eval_dir: Path, curves_path: Path, only: list[str] | None) -> tuple[lis
         grid, mass = read(eval_dir, name, task, "grid"), read(eval_dir, name, task, "mass")
         history += sweeps(grid, mass)
         behaviour = read(eval_dir, name, task, "behaviour")
-        ident = {"label": c["label"], "policy": name, "seed": c["seed"], "task": task}
+        ident = {"controller": c["controller"], "policy": name, "seed": c["seed"], "task": task}
         if grid is not None:
             grids.append(grid.assign(wind_pct=(100 * grid["wind"]).round().astype(int),
                                      damage_pct=(100 * grid["damage"]).round().astype(int), **ident))
@@ -232,15 +240,15 @@ def plan(eval_dir: Path, curves_path: Path, only: list[str] | None) -> tuple[lis
                                    "backed", "success", "time_s"]].rename(columns={"seed": "episode_seed"})
             behaviours.append(behaviour.assign(**ident))
         seed = f" #{c['seed']}" if c["seed"] is not None else ""
-        runs.append({"name": f"{task} · {c['label']}{seed}", "config": c, "tags": experiments(c),
+        runs.append({"name": f"{task} · {c['controller']}{seed}", "config": c, "tags": experiments(c),
                      "summary": summary, "history": history, "behaviour": behaviour})
 
     tables = {"all_results": results}
     if grids:
         g = pd.concat(grids, ignore_index=True)
-        tables["grid"] = g[["label", "policy", "seed", "task", "wind_pct", "damage_pct", "success_rate",
+        tables["grid"] = g[["controller", "policy", "seed", "task", "wind_pct", "damage_pct", "success_rate",
                             "success_low", "success_high", "mean_distance_cm", "failed_by_drift"]]
-        tables["grid_mean"] = (g.groupby(["label", "task", "wind_pct", "damage_pct"], as_index=False)
+        tables["grid_mean"] = (g.groupby(["controller", "task", "wind_pct", "damage_pct"], as_index=False)
                                 .agg(success_rate=("success_rate", "mean"), seeds=("success_rate", "size")))
     if masses:
         tables["mass"] = pd.concat(masses, ignore_index=True)
@@ -263,7 +271,7 @@ def replace_old(project: str, entity: str | None) -> None:
     print(f"deleted {len(old)} runs from {path} (groups {GROUP}, {TABLES})")
 
 
-def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: str) -> None:
+def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: str, figures: Path) -> None:
     import wandb
 
     # W&B copies each run's config into its own debug log, a file Windows opens in its old
@@ -288,8 +296,9 @@ def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: 
         b = item["behaviour"]
         if b is not None:
             table = wandb.Table(dataframe=plain(b[["bearing_deg", "net_turn_deg", "turned", "success"]]))
-            run.log({"behaviour/turn_vs_bearing": wandb.plot.scatter(
-                table, "bearing_deg", "net_turn_deg", title=f"{item['config']['label']}: net turn vs target bearing")})
+            title = f"{item['config']['controller']}: net turn vs target bearing"
+            scatter = wandb.plot.scatter(table, "bearing_deg", "net_turn_deg", title=title)
+            run.log({"behaviour/turn_vs_bearing": scatter})
         run.summary.update(item["summary"])
         run.finish()
         print(f"[{k}/{len(runs)}] {item['name']}: {len(item['summary'])} scores, {points} curve points")
@@ -297,8 +306,13 @@ def log(runs: list[dict], tables: dict, project: str, entity: str | None, mode: 
     run = wandb.init(project=project, entity=entity, group=TABLES, job_type="results", name="results tables",
                      dir=str(ROOT / "results"), mode=mode)
     run.log({name: wandb.Table(dataframe=plain(df)) for name, df in tables.items()})
+    # The figures W&B cannot draw itself (heatmaps, E1b, E6), for the report's image panels.
+    pictures = sorted(figures.glob("*.png")) if figures.is_dir() else []
+    if pictures:
+        run.log({f"figures/{p.stem}": wandb.Image(str(p)) for p in pictures})
     run.finish()
     print("results tables: " + ", ".join(f"{n} ({len(df)} rows)" for n, df in tables.items()))
+    print(f"figures: {len(pictures)} images from {figures}")
 
 
 def main() -> None:
@@ -310,6 +324,8 @@ def main() -> None:
     ap.add_argument("--entity", default=None, help="W&B user or team (default: the one you are logged in as)")
     ap.add_argument("--replace", action="store_true", help="first delete the runs of the groups results and "
                                                            "results_tables")
+    ap.add_argument("--figures", type=Path, default=ROOT / "results" / "figures",
+                    help="folder of PNG figures to attach to the tables run (for the report's image panels)")
     ap.add_argument("--offline", action="store_true", help="write the runs locally only (send later: wandb sync)")
     ap.add_argument("--dry-run", action="store_true", help="print what would be logged; nothing goes to W&B")
     args = ap.parse_args()
@@ -327,7 +343,7 @@ def main() -> None:
     os.environ.setdefault("WANDB_SILENT", "true")  # one line per run from us, rather than W&B's banner
     if args.replace and not args.offline:
         replace_old(args.project, args.entity)
-    log(runs, tables, args.project, args.entity, "offline" if args.offline else "online")
+    log(runs, tables, args.project, args.entity, "offline" if args.offline else "online", args.figures)
 
 
 if __name__ == "__main__":
