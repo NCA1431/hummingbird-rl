@@ -25,7 +25,7 @@ shared and what I learned.*
 > - **PPO is the most reliable learner; SAC and TD3 the most sample-efficient but unstable:** their success swings during training (SAC ends at 64%, its best checkpoint scored 99%).
 
 > **What we built and ran**
-> - **124 training runs** (102 reported, the others pilots and tuning), **181 million environment steps**: about 840 hours, or 35 days, of simulated flight, computed in about 200 CPU-hours on one desktop PC.
+> - **124 training runs** (102 reported, the others pilots and tuning), **181 million environment steps**: about 840 hours, or 35 days, of simulated flight, computed in about 200 CPU-hours on one laptop.
 > - **122 controllers evaluated** on up to five test suites: about **78,000 evaluation episodes**, drawn from held-out seeds that every controller faces in the same order.
 > - **A simulator and an interactive demo:** the physics in Python with 144 tests, ported to the browser where it reproduces the Python results to 4·10⁻¹² (105 more tests), with a live 3D simulation of the air around the bird.
 
@@ -168,9 +168,18 @@ shows its effect.
 - **Validation**: 50 fixed episodes, evaluated regularly during training (the learning curves). They happen to contain a few very hard starts that every model fails, which is why PPO's hover validation success (about 91%) is lower than its test success (98%), and why reported numbers come from fresh test episodes.
 - **Tests**: 200 held-out episodes per run, the same for every controller; 20 episodes per cell of the robustness grid, 20 per mass, 100 sudden failures. Reported numbers are from the **final** model; for SAC and TD3 the best-validation checkpoint is shown next to it.
 - **Statistics**: means over seeds, with every seed shown; 95% Wilson intervals for success rates; a paired t-test for transfer.
-- **Compute**: one desktop PC, seven runs at a time; PPO trains at about 700 steps per second, TD3 86 and SAC 43.
+- **Compute**: one laptop (8-core Ryzen 7), seven runs at a time; PPO trains at about 700 steps per second, TD3 86 and SAC 43.
 
 # 5. Results
+
+**How to read the charts.** Each colour is one controller: PPO blue, SAC orange, TD3 green, darker when
+trained in randomised conditions and lighter for the other variants; the PID dark grey and the LQR light
+grey. A bar, or a line, is the mean over the seeds of that controller (usually three). The thin black line
+on a bar spans its worst and its best seed: on hover, TD3's three seeds score 99.5%, 100% and 7%, so its bar
+stands at 69% with a line from 7 to 100%. The shaded band around a line does the same for curves. The PID
+and the LQR do not learn: on the learning curves, their test score is drawn as a flat line, for
+reference; on the sweeps (success against wind, damage or mass) their lines are real measurements. Hover
+any chart for the exact values.
 
 ## 5.1 Benchmark (E1)
 
