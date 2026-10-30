@@ -29,7 +29,7 @@ import { type Episode, type IndexEntry, Playback, damageAt, duration, endTime, s
 import { decodeAction } from "./sim/aero";
 import { DEFAULT_PARAMS, type Vec3, weight } from "./sim/params";
 import type { Quat } from "./sim/rotations";
-import { HOLD_RADIUS } from "./sim/tasks";
+import { HOLD_RADIUS, PASS_RADIUS } from "./sim/tasks";
 import { clearance } from "./sim/world";
 import { type CameraMode, type LiveChoice, Panel, type Pilot, type PlayChoice, type SandboxChoice } from "./ui/panel";
 import type { PlayEdit } from "./ui/sandboxPanel";
@@ -66,6 +66,7 @@ let worldIsPlay = false;
 let playOn = true;
 let picked: Pick | null = { kind: "target", index: 0 };
 let followMouse = false;
+let lift: { y0: number; clientY0: number } | null = null; // following with Shift held: where it started
 let playedOnce = false;
 
 /**
@@ -82,6 +83,7 @@ function show(eps: Episode[], resetCamera = true, followIndex = 0): void {
   phases = eps.map(() => 0.0);
   air.reset();
   loadWorld();
+  if (panel.mode === "sandbox") world.highlight(panel.sandbox.picked); // the world was rebuilt
   refreshBirds();
   if (resetCamera) setCamera(eye ? "eye" : episode!.task === "obstacles" || episode!.task === "navigation" ? "overview" : "follow");
 }
@@ -151,18 +153,24 @@ function pick(p: Pick | null): void {
 }
 
 /**
- * Play: moves the target or an obstacle to `pos` (and resizes an obstacle), inside the arena and
- * above the ground: the target between 5 cm and 1.1 m, an obstacle resting on the ground at worst.
+ * Where a target or an obstacle may go: inside the arena and above the ground, the target between
+ * 5 cm and 1.1 m, an obstacle resting on the ground at worst and under the 1.2 m ceiling.
  */
+function clampItem(k: Pick, pos: Vec3, radius: number): Vec3 {
+  const [lo, hi] = k.kind === "target" ? [0.05, 1.1] : [radius, 1.2 - radius];
+  return inside([pos[0], Math.min(Math.max(pos[1], lo), hi), pos[2]]);
+}
+
+/** Play: moves the target or an obstacle to `pos` (and resizes an obstacle), within clampItem's limits. */
 function moveTo(p: Pick, pos: Vec3, radius?: number): void {
   const se = session!;
   if (p.kind === "target") {
-    const q = inside([pos[0], Math.min(Math.max(pos[1], 0.05), 1.1), pos[2]]);
+    const q = clampItem(p, pos, HOLD_RADIUS);
     se.moveTarget(q);
     world.playMove(p, q);
   } else {
     const r = radius ?? se.scene.obstacles[p.index].radius;
-    const q = inside([pos[0], Math.min(Math.max(pos[1], r), 1.2 - r), pos[2]]);
+    const q = clampItem(p, pos, r);
     se.moveObstacle(p.index, q, r);
     world.playMove(p, q, r);
     air.setObstacles(se.scene.obstacles); // the air flows around them where they are now
@@ -224,6 +232,7 @@ const panel = new Panel({
   },
   async sandbox(c: SandboxChoice) {
     const mine = ++request;
+    cancelDrag(); // the scene is new: the object dragged may be gone, or have another index
     const resetCamera = c.resetCamera || !episode;
     if (c.pilots.length === 0) {
       show([waitingEpisode(c.task, c.scene, c.conditions)], resetCamera);
@@ -278,6 +287,7 @@ const panel = new Panel({
       }
       case "remove":
         if (picked?.kind !== "obstacle") return;
+        cancelDrag();
         se.removeObstacle(picked.index);
         world.loadPlay(se.scene);
         world.playTargetSeen(se.seesTarget);
@@ -307,6 +317,7 @@ const panel = new Panel({
         break;
     }
   },
+  sandboxPicked: (item) => world.highlight(item),
   current: () => episode,
   tool(tool) {
     stage.renderer.domElement.style.cursor = tool ? "crosshair" : "";
@@ -432,7 +443,7 @@ function setCamera(mode: CameraMode): void {
 function framePlay(dt: number): void {
   const se = session!;
   const simDt = playOn ? dt * keepSpeed : 0;
-  se.advance(simDt);
+  se.advance(simDt, playOn ? dt : 0); // a fallen bird waits a real second, whatever the speed
   const realBeat = playOn ? keepSpeed * dt : 0;
   const blink = Math.floor(performance.now() / 120) % 2 === 0;
   const damage = se.conditions.damage;
@@ -450,7 +461,7 @@ function framePlay(dt: number): void {
     return { s, cmd, still };
   });
   for (let i = samples.length; i < birds.length; i++) birds[i].root.visible = false;
-  followed = Math.min(followed, samples.length - 1);
+  followed = Math.max(0, Math.min(followed, samples.length - 1)); // never -1, even after a moment without birds
   const f = samples[followed];
   if (!f) return;
 
@@ -637,7 +648,7 @@ canvas.addEventListener("pointerup", (e) => {
 });
 canvas.addEventListener("pointermove", (e) => {
   const tool = panel.sandbox.tool;
-  if (panel.mode !== "sandbox" || !tool) return;
+  if (panel.mode !== "sandbox" || !tool || drag) return;
   if (tool === "erase") {
     canvas.style.cursor = pickAt(e) ? "pointer" : "crosshair";
     return;
@@ -647,57 +658,117 @@ canvas.addEventListener("pointermove", (e) => {
 });
 canvas.addEventListener("pointerleave", () => world.setGhost(null, null));
 
-// Play: press on the target or an obstacle and drag it. It slides horizontally at its height;
-// with Shift held, it moves up and down instead (the vertical distance under the pointer, at the
-// object's distance from the camera). Pressing anywhere else turns the camera, as usual. On a
-// touch screen the finger is the pointer, so dragging works the same, with a wider margin around
-// the object since a fingertip covers many pixels.
-let drag: {
+// Dragging, in Play and in the Sandbox: press on a target or an obstacle and drag it. It slides
+// horizontally at its height; with Shift held, it moves up and down instead (the vertical distance
+// under the pointer, at the object's distance from the camera). Pressing anywhere else turns the
+// camera, as usual. On a touch screen the finger is the pointer, so dragging works the same, with
+// a wider margin around the object since a fingertip covers many pixels. In Play the birds react
+// to every move; in the Sandbox the object moves on screen and the birds fly again on release.
+interface Item {
   pick: Pick;
+  center: Vec3;
+  radius: number;
+}
+
+let drag: {
+  item: Item;
+  pos: Vec3; // where the object is now
+  play: boolean;
+  moved: boolean;
   pointerId: number;
   plane: THREE.Plane; // the horizontal plane the object slides in
   offset: THREE.Vector3; // from the point under the pointer to the object's centre
   vertical: boolean;
   y0: number;
   clientY0: number;
+  lifter: number | null; // touch: a second finger down, which makes the drag vertical
+  controls: boolean; // whether the camera's controls were on (they are off during the drag)
 } | null = null;
+const touches = new Set<number>(); // the fingers on the screen now
 
-/** The centre and radius of the target or obstacle `k`. */
-function playItem(k: Pick): { center: Vec3; radius: number } {
-  const sc = session!.scene;
-  return k.kind === "target" ? { center: sc.targets[0], radius: HOLD_RADIUS } : sc.obstacles[k.index];
+/**
+ * Drops a drag under way when the scene changes under it: an obstacle removed with the Delete key,
+ * or, on a touch screen, with a second finger on a button. The drag holds the object by its index,
+ * which would then point at another object, or at none.
+ */
+function cancelDrag(): void {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  stage.controls.enabled = d.controls;
+  if (canvas.hasPointerCapture(d.pointerId)) canvas.releasePointerCapture(d.pointerId);
+  canvas.style.cursor = "";
 }
 
-/** What the pointer is on in Play, measured on the screen: the nearest object within a margin, or null. */
-function pickPlay(e: PointerEvent): Pick | null {
-  if (!session) return null;
+const inPlay = () => panel.mode === "play" && session !== null && worldIsPlay;
+
+/** The targets and obstacles that can be dragged now, where they are. */
+function draggable(): Item[] {
+  const obstacles = (os: { center: Vec3; radius: number }[]) =>
+    os.map((o, i): Item => ({ pick: { kind: "obstacle", index: i }, center: o.center, radius: o.radius }));
+  if (inPlay()) {
+    const sc = session!.scene;
+    return [{ pick: { kind: "target", index: 0 }, center: sc.targets[0], radius: HOLD_RADIUS }, ...obstacles(sc.obstacles)];
+  }
+  // The Sandbox, except with Erase (a click there removes). Hover's target is the start point: it stays.
+  if (panel.mode !== "sandbox" || panel.sandbox.tool === "erase") return [];
+  const sc = panel.sandbox.scene;
+  const task = panel.sandbox.task;
+  const last = sc.targets.length - 1;
+  const targets =
+    task === "hover"
+      ? []
+      : sc.targets.map((t, i): Item => ({
+          pick: { kind: "target", index: i },
+          center: t,
+          radius: task === "navigation" && i < last ? PASS_RADIUS : HOLD_RADIUS,
+        }));
+  return [...targets, ...obstacles(sc.obstacles)];
+}
+
+/** What the pointer is on, measured on the screen: the nearest object within a margin, or null. */
+function itemAt(e: PointerEvent): Item | null {
   const rect = canvas.getBoundingClientRect();
   const margin = e.pointerType === "touch" ? 28 : 8; // px around the drawn ball
   const half = THREE.MathUtils.degToRad(stage.camera.fov / 2);
-  const all: Pick[] = [{ kind: "target", index: 0 }, ...session.scene.obstacles.map((_, i): Pick => ({ kind: "obstacle", index: i }))];
-  let best: Pick | null = null;
+  let best: Item | null = null;
   let nearest = Infinity;
-  for (const k of all) {
-    const { center, radius } = playItem(k);
-    const c = new THREE.Vector3(...center);
+  for (const it of draggable()) {
+    const c = new THREE.Vector3(...it.center);
     const ndc = c.clone().project(stage.camera);
     if (ndc.z > 1) continue; // behind the camera
     const x = rect.left + ((ndc.x + 1) / 2) * rect.width;
     const y = rect.top + ((1 - ndc.y) / 2) * rect.height;
-    const pixels = (radius / (c.distanceTo(stage.camera.position) * Math.tan(half))) * (rect.height / 2);
+    const pixels = (it.radius / (c.distanceTo(stage.camera.position) * Math.tan(half))) * (rect.height / 2);
     const gap = Math.hypot(e.clientX - x, e.clientY - y) - pixels;
     if (gap < margin && gap < nearest) {
       nearest = gap;
-      best = k;
+      best = it;
     }
   }
   return best;
 }
 
-/** Re-anchors the drag where the object is now (at the start, and when Shift is pressed or released). */
+/** Play: the centre and radius of the target or obstacle `k` (for following the mouse). */
+function playItem(k: Pick): { center: Vec3; radius: number } {
+  const sc = session!.scene;
+  return k.kind === "target" ? { center: sc.targets[0], radius: HOLD_RADIUS } : sc.obstacles[k.index];
+}
+
+/** How many metres one pixel of the screen spans at the distance of `point` from the camera. */
+function metresPerPixel(point: Vec3): number {
+  const distance = new THREE.Vector3(...point).distanceTo(stage.camera.position);
+  const height = canvas.getBoundingClientRect().height;
+  return (2 * distance * Math.tan(THREE.MathUtils.degToRad(stage.camera.fov / 2))) / height;
+}
+
+/** Whether the drag moves the object up and down: Shift held, or a second finger down. */
+const lifting = (d: NonNullable<typeof drag>, e: PointerEvent) => e.shiftKey || d.lifter !== null;
+
+/** Re-anchors the drag where the object is now (at the start, and when the direction changes). */
 function anchor(d: NonNullable<typeof drag>, e: PointerEvent): void {
-  const c = playItem(d.pick).center;
-  d.vertical = e.shiftKey;
+  const c = d.pos;
+  d.vertical = lifting(d, e);
   d.y0 = c[1];
   d.clientY0 = e.clientY;
   d.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -c[1]);
@@ -705,59 +776,132 @@ function anchor(d: NonNullable<typeof drag>, e: PointerEvent): void {
   d.offset = hit ? new THREE.Vector3(...c).sub(hit) : new THREE.Vector3();
 }
 
-const inPlay = () => panel.mode === "play" && session !== null && worldIsPlay;
-
-// Capturing, so that this runs before the camera's own controls and can keep them from turning.
+// Capturing, so that this runs before the camera's own controls and can keep them from turning
+// (and, in the Sandbox, before a click with the Target or Obstacle tool would place a new one).
 canvas.addEventListener(
   "pointerdown",
   (e) => {
-    if (!inPlay()) return;
-    const k = pickPlay(e);
-    if (!k) return; // the camera turns
+    if (e.button !== 0) return; // the right button pans the camera, even over an object
+    const it = itemAt(e);
+    if (!it) return; // the camera turns
     e.stopImmediatePropagation();
     e.preventDefault();
-    pick(k);
-    drag = { pick: k, pointerId: e.pointerId, plane: new THREE.Plane(), offset: new THREE.Vector3(), vertical: false, y0: 0, clientY0: 0 };
+    const play = inPlay();
+    if (play) pick(it.pick);
+    drag = {
+      item: it,
+      pos: [...it.center] as Vec3,
+      play,
+      moved: false,
+      pointerId: e.pointerId,
+      plane: new THREE.Plane(),
+      offset: new THREE.Vector3(),
+      vertical: false,
+      y0: 0,
+      clientY0: 0,
+      // A finger already down elsewhere (put first) lifts as well as one put after.
+      lifter: e.pointerType === "touch" ? ([...touches].find((id) => id !== e.pointerId) ?? null) : null,
+      controls: stage.controls.enabled,
+    };
+    // The camera keeps still while an object is dragged, even if a finger put first had started turning it.
+    stage.controls.enabled = false;
     anchor(drag, e);
+    world.setGhost(null, null);
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor = "grabbing";
   },
   { capture: true },
 );
 canvas.addEventListener("pointermove", (e) => {
-  if (!inPlay()) return;
-  const se = session!;
   if (drag && e.pointerId === drag.pointerId) {
-    if (e.shiftKey !== drag.vertical) anchor(drag, e);
-    const c = playItem(drag.pick).center;
-    if (drag.vertical) {
-      const rect = canvas.getBoundingClientRect();
-      const distance = new THREE.Vector3(...c).distanceTo(stage.camera.position);
-      const perPixel = (2 * distance * Math.tan(THREE.MathUtils.degToRad(stage.camera.fov / 2))) / rect.height;
-      moveTo(drag.pick, [c[0], drag.y0 + (drag.clientY0 - e.clientY) * perPixel, c[2]]);
-    } else {
+    // The mode changed during the drag (a second finger on a mode button): the object is not there any more.
+    if (drag.play !== inPlay() || (!drag.play && panel.mode !== "sandbox")) return cancelDrag();
+    if (lifting(drag, e) !== drag.vertical) anchor(drag, e);
+    const c = drag.pos;
+    let to: Vec3 | null = null;
+    if (drag.vertical) to = [c[0], drag.y0 + (drag.clientY0 - e.clientY) * metresPerPixel(c), c[2]];
+    else {
       const hit = rayAt(e).intersectPlane(drag.plane, new THREE.Vector3());
-      if (hit) moveTo(drag.pick, [hit.x + drag.offset.x, drag.y0, hit.z + drag.offset.z]);
+      if (hit) to = [hit.x + drag.offset.x, drag.y0, hit.z + drag.offset.z];
+    }
+    if (!to) return;
+    drag.pos = clampItem(drag.item.pick, to, drag.item.radius);
+    drag.moved = true;
+    if (drag.play) moveTo(drag.item.pick, drag.pos);
+    else world.moveItem(drag.item.pick, drag.pos);
+    return;
+  }
+  if (inPlay() && followMouse && e.pointerType === "mouse" && e.buttons === 0) {
+    // The object picked (the target if none) goes under the mouse, at its own height; with Shift
+    // held, it goes up and down with the mouse instead, as Shift + drag does.
+    const k: Pick = picked ?? { kind: "target", index: 0 };
+    const c = playItem(k).center;
+    if (e.shiftKey) {
+      lift ??= { y0: c[1], clientY0: e.clientY };
+      moveTo(k, [c[0], lift.y0 + (lift.clientY0 - e.clientY) * metresPerPixel(c), c[2]]);
+    } else {
+      lift = null;
+      const hit = rayAt(e).intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -c[1]), new THREE.Vector3());
+      if (hit) moveTo(k, [hit.x, c[1], hit.z]);
     }
     return;
   }
-  if (followMouse && e.pointerType === "mouse" && e.buttons === 0) {
-    // The target goes under the mouse, at its own height.
-    const t = se.scene.targets[0];
-    const hit = rayAt(e).intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -t[1]), new THREE.Vector3());
-    if (hit) moveTo({ kind: "target", index: 0 }, [hit.x, t[1], hit.z]);
-    return;
-  }
-  if (e.buttons === 0) canvas.style.cursor = pickPlay(e) ? "grab" : "";
+  if (e.buttons !== 0) return;
+  if (inPlay()) canvas.style.cursor = itemAt(e) ? "grab" : "";
+  else if (panel.mode === "sandbox" && panel.sandbox.tool !== "erase" && itemAt(e)) {
+    // Over a placed object, a press moves it rather than placing a new one: no preview then.
+    canvas.style.cursor = "grab";
+    world.setGhost(null, null);
+  } else if (panel.mode === "sandbox" && panel.sandbox.tool !== "erase") canvas.style.cursor = panel.sandbox.tool ? "crosshair" : "";
 });
 const endDrag = (e: PointerEvent) => {
   if (!drag || e.pointerId !== drag.pointerId) return;
+  const done = drag;
   drag = null;
+  stage.controls.enabled = done.controls;
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   canvas.style.cursor = "";
+  if (done.play || panel.mode !== "sandbox") return;
+  // The Sandbox: a tap picks the object (the sliders then change it); a drag moves it there, picks
+  // it, and the birds fly again.
+  const k = done.item.pick;
+  if (done.moved) panel.sandbox.moveItem(k.kind, k.index, done.pos);
+  else panel.sandbox.pick({ kind: k.kind, index: k.index });
 };
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
+
+// Touch: a second finger down anywhere, before or after the one that drags an object, makes the drag
+// vertical, as Shift does with a mouse; lifting it goes back to horizontal. The fingers are counted
+// on the window, so one on a panel counts too. Caught on the way down, before the camera (which
+// would read two fingers as a pinch) or a button under that finger can see it.
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (e.pointerType === "touch") touches.add(e.pointerId);
+  },
+  { capture: true },
+);
+const untouch = (e: PointerEvent) => {
+  touches.delete(e.pointerId);
+};
+window.addEventListener("pointerup", untouch, { capture: true });
+window.addEventListener("pointercancel", untouch, { capture: true });
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (!drag || e.pointerType !== "touch" || e.pointerId === drag.pointerId) return;
+    drag.lifter = e.pointerId;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },
+  { capture: true },
+);
+const liftEnd = (e: PointerEvent) => {
+  if (drag && e.pointerId === drag.lifter) drag.lifter = null;
+};
+window.addEventListener("pointerup", liftEnd, { capture: true });
+window.addEventListener("pointercancel", liftEnd, { capture: true });
 
 // The 3D model (1.1 MB, plus its 0.5 MB specular map) arrives after the page. The birds
 // stay hidden until then, otherwise the drawn bird flashes for a few frames at every

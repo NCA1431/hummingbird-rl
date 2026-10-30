@@ -243,6 +243,26 @@ export class World {
     });
   }
 
+  /** Sandbox: the object picked glows (null: none). */
+  highlight(pick: Pick | null): void {
+    for (const o of this.pickables) {
+      const k = o.userData.pick as Pick;
+      const on = pick !== null && k.kind === pick.kind && k.index === pick.index;
+      ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).emissive?.set(on ? 0x5a3a10 : 0x000000);
+    }
+  }
+
+  /** Sandbox: a target or an obstacle dragged to `pos`, on screen until the flight is redone. */
+  moveItem(pick: Pick, pos: Vec3): void {
+    const o = this.pickables.find((x) => {
+      const k = x.userData.pick as Pick;
+      return k.kind === pick.kind && k.index === pick.index;
+    });
+    if (!o) return;
+    o.position.set(pos[0], pos[1], pos[2]);
+    for (const c of o.children) if (c.userData.stem) setStem(c as THREE.Line, pos[1]);
+  }
+
   /** The trails of the other birds of the sandbox, each in its colour. */
   setOthers(others: { ep: Episode; color: number }[]): void {
     for (const t of this.others) this.root.remove(t);

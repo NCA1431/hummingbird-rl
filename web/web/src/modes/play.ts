@@ -10,9 +10,13 @@
  * limits). What changes is the episode around it:
  *   - there is no time limit and no success that ends the flight: holding the
  *     target only fills the "holding" gauge, which stays full;
- *   - a bird that crashes, leaves the arena, tilts past 80° or touches an
- *     obstacle stops where it is, and starts again from the start point a
- *     second later (the controller is reset, as for a new episode);
+ *   - a bird that hits the ground, leaves the arena or touches an obstacle
+ *     stops where it is, and starts again from the start point a second later
+ *     (the controller is reset, as for a new episode). The episodes' 80° rule
+ *     is not used: it ends a training episode because a bird tilted that far is
+ *     usually lost, but here we let it fight on, and it often recovers (a
+ *     target dragged fast makes the birds tilt hard). Only a spin too fast for
+ *     the simulation to follow stops it as well, as after the end of a live flight;
  *   - the target can be hidden from the birds: its slot in the observation is
  *     then empty (zeros, "valid" flag 0), which no controller met in training;
  *   - a network trained on a task without obstacles (hover, go-to-point) does
@@ -24,7 +28,7 @@
 import type { Controller } from "../control/controller";
 import { decodeAction, hoverAction, wingThrusts } from "../sim/aero";
 import type { Conditions } from "../sim/disturbances";
-import { type BirdState, BirdDynamics, checkLimits, stateFromEuler } from "../sim/dynamics";
+import { ARENA_RADIUS, type BirdState, BirdDynamics, CEILING, GROUND_HEIGHT, stateFromEuler } from "../sim/dynamics";
 import { buildObservation } from "../sim/observation";
 import { type BirdParams, DEFAULT_PARAMS, type Vec3, radians } from "../sim/params";
 import { Rng } from "../sim/random";
@@ -33,9 +37,17 @@ import { HOLD_RADIUS, HOLD_SPEED, HOLD_STEPS } from "../sim/tasks";
 import { GustProcess } from "../sim/wind";
 import { type Obstacle, type Scene, START, collides } from "../sim/world";
 
-export const RESPAWN_DELAY = 1.0; // s of simulated time a fallen bird stays still before starting again
+// s of REAL time a fallen bird stays still (blinking) before starting again, whatever the speed of
+// the simulation: at ×1/64 a second of simulated time would be a minute of waiting, at ×4 a blink.
+export const RESPAWN_DELAY = 1.0;
 export const TRAIL_SECONDS = 4.0; // s of path drawn behind each bird
 const MAX_STEPS_PER_CALL = 30; // decisions per frame at most: a hidden tab must not freeze the page on return
+// A bird tilted past 80° can spin fast. Above FAST_SPIN a physics step of 1/240 s is cut into
+// SUBSTEPS (at 100 rad/s it would turn the bird by half a radian at once and the integration would
+// diverge); above MAX_SPIN even those are too coarse, and the bird is stopped. As in env.ts's stepAfterEnd.
+const FAST_SPIN = 25.0; // rad/s, far above a flying bird's rates
+const SUBSTEPS = 8;
+const MAX_SPIN = 400.0; // rad/s
 
 /** Who flies a bird: its controller, and whether it sees the obstacles (as in its training). */
 export interface PlayPilot {
@@ -75,8 +87,8 @@ export class PlayBird {
   state!: BirdState;
   prev!: PlayFrame; // the frame before `now`: drawing interpolates between the two
   now!: PlayFrame;
-  /** Why the bird is down and since when (simulated time), or null while it flies. */
-  down: { reason: string; at: number } | null = null;
+  /** Why the bird is down, since when (simulated time) and for how long already (real time), or null while it flies. */
+  down: { reason: string; at: number; waited: number } | null = null;
   falls = 0; // how many times it has had to start again
   readonly trail: Vec3[] = [];
   readonly dyn: BirdDynamics;
@@ -159,24 +171,22 @@ export class PlayBird {
   step(winds: Vec3[]): void {
     const se = this.session;
     this.prev = this.now;
-    if (this.down) {
-      if (se.time - this.down.at >= RESPAWN_DELAY - 1e-9) this.respawn(); // the times add up 1/60 at a time
-      return; // it lies still until then
-    }
+    if (this.down) return; // it lies still until it starts again (PlaySession.advance)
     const out = this.pilot.controller.act(this.observe());
     const a = Array.from({ length: 5 }, (_, i) => clip1(out[i]));
     const c = se.conditions;
     const applied = c.action_noise > 0.0 ? a.map((x) => clip1(x + c.action_noise * this.noise.normal())) : a;
     let reason: string | null = null;
     for (const wind of winds) {
-      [this.state] = this.dyn.step(this.state, applied, wind);
-      reason = checkLimits(this.state);
-      if (reason === null && collides(this.state.pos, se.scene.obstacles, se.p.r_bird)) reason = "collision";
+      const spin = Math.hypot(...this.state.omega);
+      if (spin <= FAST_SPIN) [this.state] = this.dyn.step(this.state, applied, wind);
+      else for (let j = 0; j < SUBSTEPS; j++) [this.state] = this.dyn.step(this.state, applied, wind, se.p.dt / SUBSTEPS);
+      reason = this.stopReason();
       if (reason !== null) break;
     }
     this.prevAction = a;
     if (reason !== null) {
-      this.down = { reason, at: se.time };
+      this.down = { reason, at: se.time, waited: 0.0 };
       this.falls += 1;
     }
     // The gauge of the go-to-point task, but it stays full instead of ending the flight.
@@ -187,6 +197,16 @@ export class PlayBird {
     this.now = this.frame();
     this.trail.push([...this.state.pos] as Vec3);
     if (this.trail.length > Math.round(TRAIL_SECONDS / se.controlDt)) this.trail.shift();
+  }
+
+  /** Why the flight must stop now, or null: the ground, the arena's limits, an obstacle, a spin too fast. */
+  private stopReason(): string | null {
+    const [x, y, z] = this.state.pos;
+    if (y < GROUND_HEIGHT) return "crash";
+    if (Math.hypot(x, z) > ARENA_RADIUS || y > CEILING) return "out_of_bounds";
+    if (collides(this.state.pos, this.session.scene.obstacles, this.session.p.r_bird)) return "collision";
+    if (Math.hypot(...this.state.omega) > MAX_SPIN) return "spin";
+    return null;
   }
 
   private frame(): PlayFrame {
@@ -275,8 +295,19 @@ export class PlaySession {
     for (const b of this.birds) b.respawn();
   }
 
-  /** Runs `simDt` seconds of simulated time, decision by decision; returns how many decisions ran. */
-  advance(simDt: number): number {
+  /**
+   * Runs `simDt` seconds of simulated time, decision by decision; returns how many decisions ran.
+   * `realDt`: the real time that went by meanwhile (0 while paused), which the fallen birds wait
+   * out before starting again; by default the same as simDt (as at ×1, and in the tests).
+   */
+  advance(simDt: number, realDt: number = simDt): number {
+    if (realDt > 0) {
+      for (const b of this.birds) {
+        if (!b.down) continue;
+        b.down.waited += realDt;
+        if (b.down.waited >= RESPAWN_DELAY - 1e-9) b.respawn(); // the times add up a frame at a time
+      }
+    }
     this.acc += simDt;
     let n = 0;
     while (this.acc >= this.controlDt && n < MAX_STEPS_PER_CALL) {
@@ -337,6 +368,8 @@ export function fallWords(reason: string): string {
       return "hit the ground";
     case "out_of_bounds":
       return "left the arena";
+    case "spin":
+      return "spun out of control";
     case "loss_of_control":
       return "lost control (tilted past 80°)";
     default:
