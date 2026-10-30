@@ -17,7 +17,8 @@ import { PlaySession, RESPAWN_DELAY, defaultPlayScene } from "../src/modes/play"
 import { calmConditions } from "../src/sim/disturbances";
 import { hoverAction } from "../src/sim/aero";
 import * as ob from "../src/sim/observation";
-import { DEFAULT_PARAMS, type Vec3, weight } from "../src/sim/params";
+import { stateFromEuler } from "../src/sim/dynamics";
+import { DEFAULT_PARAMS, type Vec3, radians, weight } from "../src/sim/params";
 
 const p = DEFAULT_PARAMS;
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -135,8 +136,35 @@ describe("play: falls and restarts", () => {
     fly(s, 0.75 * RESPAWN_DELAY);
     expect(b.down).toBeNull();
     // A new path, from the start point, not a line from where it fell.
-    expect(b.trail.length).toBeLessThan(20);
+    expect(b.trail.length).toBeLessThan(40); // half a second at most since it came back
     expect(dist(b.trail[0], scene.start)).toBeLessThan(0.05);
+  });
+
+  it("waits one second of real time before starting again, whatever the speed of the simulation", () => {
+    const frame = 1 / 60; // s of real time per frame
+    for (const speed of [1 / 64, 1, 4]) {
+      const s = new PlaySession(defaultPlayScene(), calmConditions(), [pid()], 13);
+      fly(s, 2);
+      const b = s.birds[0];
+      s.moveObstacle(0, [...b.state.pos] as Vec3);
+      while (!b.down) s.advance(speed * frame, frame);
+      s.moveObstacle(0, [0.6, 0.3, -0.6]);
+      for (let k = 0; k < 55; k++) s.advance(speed * frame, frame); // 0.92 s of real time
+      expect(b.down).not.toBeNull();
+      for (let k = 0; k < 10; k++) s.advance(speed * frame, frame); // past 1 s
+      expect(b.down).toBeNull();
+    }
+  });
+
+  it("does not count the time while paused", () => {
+    const s = new PlaySession(defaultPlayScene(), calmConditions(), [pid()], 14);
+    fly(s, 2);
+    const b = s.birds[0];
+    s.moveObstacle(0, [...b.state.pos] as Vec3);
+    s.advance(s.controlDt);
+    expect(b.down).not.toBeNull();
+    for (let k = 0; k < 200; k++) s.advance(0, 0); // paused: no simulated time, no real time counted
+    expect(b.down).not.toBeNull();
   });
 
   it("a bird that is not given lift falls to the ground and comes back", () => {
@@ -144,6 +172,31 @@ describe("play: falls and restarts", () => {
     const s = new PlaySession(defaultPlayScene(), calmConditions(), [{ id: 0, controller: off, seesObstacles: true }], 7);
     fly(s, 2);
     expect(s.birds[0].falls).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("play: no 80° rule", () => {
+  it("a bird tilted past 80° keeps flying, and the PID recovers even from 120° of roll", () => {
+    for (const roll of [85, 120]) {
+      const scene = defaultPlayScene();
+      scene.obstacles = [];
+      const s = new PlaySession(scene, calmConditions(), [pid()], 11);
+      fly(s, 1);
+      const b = s.birds[0];
+      // An episode would end at once here ("loss of control"); Play lets the controller fight on.
+      b.state = stateFromEuler([...b.state.pos] as Vec3, [0, 0, 0], 0, 0, radians(roll), [0, 0, 0]);
+      fly(s, 3);
+      expect(b.falls).toBe(0);
+      expect(dist(b.state.pos, scene.targets[0])).toBeLessThan(0.03);
+    }
+  });
+
+  it("a spin too fast for the simulation to follow stops the bird", () => {
+    const s = new PlaySession(defaultPlayScene(), calmConditions(), [pid()], 12);
+    const b = s.birds[0];
+    b.state.omega = [500, 0, 0];
+    s.advance(s.controlDt);
+    expect(b.down?.reason).toBe("spin");
   });
 });
 

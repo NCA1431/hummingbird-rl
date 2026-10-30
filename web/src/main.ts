@@ -83,6 +83,7 @@ function show(eps: Episode[], resetCamera = true, followIndex = 0): void {
   phases = eps.map(() => 0.0);
   air.reset();
   loadWorld();
+  if (panel.mode === "sandbox") world.highlight(panel.sandbox.picked); // the world was rebuilt
   refreshBirds();
   if (resetCamera) setCamera(eye ? "eye" : episode!.task === "obstacles" || episode!.task === "navigation" ? "overview" : "follow");
 }
@@ -314,6 +315,7 @@ const panel = new Panel({
         break;
     }
   },
+  sandboxPicked: (item) => world.highlight(item),
   current: () => episode,
   tool(tool) {
     stage.renderer.domElement.style.cursor = tool ? "crosshair" : "";
@@ -439,7 +441,7 @@ function setCamera(mode: CameraMode): void {
 function framePlay(dt: number): void {
   const se = session!;
   const simDt = playOn ? dt * keepSpeed : 0;
-  se.advance(simDt);
+  se.advance(simDt, playOn ? dt : 0); // a fallen bird waits a real second, whatever the speed
   const realBeat = playOn ? keepSpeed * dt : 0;
   const blink = Math.floor(performance.now() / 120) % 2 === 0;
   const damage = se.conditions.damage;
@@ -677,7 +679,10 @@ let drag: {
   vertical: boolean;
   y0: number;
   clientY0: number;
+  lifter: number | null; // touch: a second finger down, which makes the drag vertical
+  controls: boolean; // whether the camera's controls were on (they are off during the drag)
 } | null = null;
+const touches = new Set<number>(); // the fingers on the screen now
 
 const inPlay = () => panel.mode === "play" && session !== null && worldIsPlay;
 
@@ -741,10 +746,13 @@ function metresPerPixel(point: Vec3): number {
   return (2 * distance * Math.tan(THREE.MathUtils.degToRad(stage.camera.fov / 2))) / height;
 }
 
-/** Re-anchors the drag where the object is now (at the start, and when Shift is pressed or released). */
+/** Whether the drag moves the object up and down: Shift held, or a second finger down. */
+const lifting = (d: NonNullable<typeof drag>, e: PointerEvent) => e.shiftKey || d.lifter !== null;
+
+/** Re-anchors the drag where the object is now (at the start, and when the direction changes). */
 function anchor(d: NonNullable<typeof drag>, e: PointerEvent): void {
   const c = d.pos;
-  d.vertical = e.shiftKey;
+  d.vertical = lifting(d, e);
   d.y0 = c[1];
   d.clientY0 = e.clientY;
   d.plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -c[1]);
@@ -774,7 +782,12 @@ canvas.addEventListener(
       vertical: false,
       y0: 0,
       clientY0: 0,
+      // A finger already down elsewhere (put first) lifts as well as one put after.
+      lifter: e.pointerType === "touch" ? ([...touches].find((id) => id !== e.pointerId) ?? null) : null,
+      controls: stage.controls.enabled,
     };
+    // The camera keeps still while an object is dragged, even if a finger put first had started turning it.
+    stage.controls.enabled = false;
     anchor(drag, e);
     world.setGhost(null, null);
     canvas.setPointerCapture(e.pointerId);
@@ -784,7 +797,7 @@ canvas.addEventListener(
 );
 canvas.addEventListener("pointermove", (e) => {
   if (drag && e.pointerId === drag.pointerId) {
-    if (e.shiftKey !== drag.vertical) anchor(drag, e);
+    if (lifting(drag, e) !== drag.vertical) anchor(drag, e);
     const c = drag.pos;
     let to: Vec3 | null = null;
     if (drag.vertical) to = [c[0], drag.y0 + (drag.clientY0 - e.clientY) * metresPerPixel(c), c[2]];
@@ -826,13 +839,50 @@ const endDrag = (e: PointerEvent) => {
   if (!drag || e.pointerId !== drag.pointerId) return;
   const done = drag;
   drag = null;
+  stage.controls.enabled = done.controls;
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   canvas.style.cursor = "";
-  // The Sandbox flies again with the object where it was released.
-  if (!done.play && done.moved && panel.mode === "sandbox") panel.sandbox.moveItem(done.item.pick.kind, done.item.pick.index, done.pos);
+  if (done.play || panel.mode !== "sandbox") return;
+  // The Sandbox: a tap picks the object (the sliders then change it); a drag moves it there, picks
+  // it, and the birds fly again.
+  const k = done.item.pick;
+  if (done.moved) panel.sandbox.moveItem(k.kind, k.index, done.pos);
+  else panel.sandbox.pick({ kind: k.kind, index: k.index });
 };
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
+
+// Touch: a second finger down anywhere, before or after the one that drags an object, makes the drag
+// vertical, as Shift does with a mouse; lifting it goes back to horizontal. The fingers are counted
+// on the window, so one on a panel counts too. Caught on the way down, before the camera (which
+// would read two fingers as a pinch) or a button under that finger can see it.
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (e.pointerType === "touch") touches.add(e.pointerId);
+  },
+  { capture: true },
+);
+const untouch = (e: PointerEvent) => {
+  touches.delete(e.pointerId);
+};
+window.addEventListener("pointerup", untouch, { capture: true });
+window.addEventListener("pointercancel", untouch, { capture: true });
+window.addEventListener(
+  "pointerdown",
+  (e) => {
+    if (!drag || e.pointerType !== "touch" || e.pointerId === drag.pointerId) return;
+    drag.lifter = e.pointerId;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },
+  { capture: true },
+);
+const liftEnd = (e: PointerEvent) => {
+  if (drag && e.pointerId === drag.lifter) drag.lifter = null;
+};
+window.addEventListener("pointerup", liftEnd, { capture: true });
+window.addEventListener("pointercancel", liftEnd, { capture: true });
 
 // The 3D model (1.1 MB, plus its 0.5 MB specular map) arrives after the page. The birds
 // stay hidden until then, otherwise the drawn bird flashes for a few frames at every

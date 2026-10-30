@@ -243,6 +243,15 @@ export class World {
     });
   }
 
+  /** Sandbox: the object picked glows (null: none). */
+  highlight(pick: Pick | null): void {
+    for (const o of this.pickables) {
+      const k = o.userData.pick as Pick;
+      const on = pick !== null && k.kind === pick.kind && k.index === pick.index;
+      ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).emissive?.set(on ? 0x5a3a10 : 0x000000);
+    }
+  }
+
   /** Sandbox: a target or an obstacle dragged to `pos`, on screen until the flight is redone. */
   moveItem(pick: Pick, pos: Vec3): void {
     const o = this.pickables.find((x) => {

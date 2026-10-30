@@ -28,7 +28,7 @@ import type { Scene } from "../sim/world";
 import type { FluidScales } from "../sim/fluid";
 import { type AirMode, paletteCss } from "../view/air";
 import { BIRD_COLORS } from "../view/bird";
-import { type BirdSlot, type PlayEdit, SandboxPanel } from "./sandboxPanel";
+import { type BirdSlot, type ItemRef, type PlayEdit, SandboxPanel } from "./sandboxPanel";
 import { TASK_NAMES, counterpart, ending, label } from "./words";
 
 export const SPEEDS: [number, string][] = [
@@ -93,6 +93,7 @@ export interface PanelHandlers {
   sandbox(choice: SandboxChoice): void;
   play(choice: PlayChoice): void;
   playEdit(edit: PlayEdit): void;
+  sandboxPicked(item: ItemRef | null): void; // the Sandbox's object picked (it glows)
   current(): Episode | null; // the episode on screen, which the sandbox starts from
   tool(tool: Tool): void;
   looks(slots: BirdSlot[]): void; // the sandbox birds' look changed (3D model or drawn)
@@ -193,6 +194,7 @@ export class Panel {
       looks: (slots) => h.looks(slots),
       follow: (index) => h.follow(index),
       play: (edit) => h.playEdit(edit),
+      picked: (item) => h.sandboxPicked(item),
     });
     this.task.onchange = () => this.fillPolicies(true);
     this.policy.onchange = () => (this.mode === "live" ? this.chooseLive() : this.fillEpisodes()); // hidden in the sandbox
@@ -281,7 +283,10 @@ export class Panel {
         h.playPause();
       } else if (e.key === "r") h.restart();
       else if (e.key === "n" && this.mode === "live") this.chooseLive(true);
-      else if (this.mode === "play" && !(e.target instanceof HTMLInputElement && e.target.type === "text")) {
+      else if (this.mode === "sandbox" && (e.key === "Escape" || e.key === "Delete" || e.key === "Backspace")) {
+        if (e.key === "Escape") this.sandbox.pick(null);
+        else this.sandbox.removePicked();
+      } else if (this.mode === "play" && !(e.target instanceof HTMLInputElement && e.target.type === "text")) {
         // (a checkbox or a slider just clicked keeps the focus; the keys must still work)
         if (e.key === "f") this.sandbox.setFollowing(!this.sandbox.following);
         else if (e.key === "Escape") this.sandbox.setFollowing(false);

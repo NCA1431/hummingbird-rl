@@ -33,7 +33,7 @@ npm run build      # static site in dist/ (type check first)
   sudden failure and noise set by hand; up to four controllers flying the same situation, each bird in its
   colour, drawn or as the 3D model, the camera following the one chosen. Every change flies again.
 - `src/modes/play.ts` — Play: the birds stepped in real time while the visitor drags the target or an
-  obstacle (Shift + drag: up and down; F: the object picked follows the mouse, Shift: up and down), with no end: a bird that falls
+  obstacle (Shift + drag: up and down; F: the object picked follows the mouse, Shift: up and down), with no end and without the episodes' 80° rule: a bird that hits the ground, leaves the arena or touches an obstacle
   starts again from the start point. Each controller gets the training observation, with the target's
   slot empty when "the birds see the target" is off, and the obstacles hidden from networks trained
   without any. The Play section of `src/ui/sandboxPanel.ts`, the dragging in `src/main.ts`.
@@ -48,8 +48,10 @@ npm run build      # static site in dist/ (type check first)
   (instructions inside), and drawn by `src/view/feathers.ts`, a port of the earlier Panda3D viewer's shader.
 
 Controls: Space = play/pause, R = restart, N = new live flight; drag to orbit, scroll to zoom.
-In Play: drag the target or an obstacle, Shift + drag to move it up and down, F to make the object
-picked follow the mouse (Shift held: up and down; Esc stops it), Delete to remove the obstacle picked.
+Sandbox and Play: drag a target or an obstacle to move it; Shift + drag (touch: a second finger down
+anywhere, before or after) moves it up and down. Sandbox: a tap picks it for the height and size sliders, Esc
+unpicks, Delete removes. Play: F makes the object picked follow the mouse (Shift held: up and down; Esc
+stops it), Delete removes the obstacle picked. All of this is also in the page's Legend.
 The top panel and the controls fold to their essentials with their corner button (the top one
 starts folded on phones).
 Cameras: Follow, Side, Top, Behind, Bird's eye (first person at the bird's eye, along its heading,

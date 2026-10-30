@@ -368,10 +368,23 @@
           from a live flight, it starts from that flight.</li>
         <li><b>Play</b>: the birds fly without end, in real time, after a target you move: drag it, or an
           obstacle, while they fly (Shift + drag: up and down; F: the object picked follows the mouse, Shift: up and down). Any controller of
-          any task can fly; a bird that falls starts again from the start point. "The birds see the target" off:
+          any task can fly; a bird that hits the ground, leaves the arena or touches an obstacle starts again from the
+          start point (tilting past 80°, which ends an episode, does not stop it here: it often recovers). "The birds see the target" off:
           they are no longer told where it is (it turns grey), something no controller met in training.</li>
       </ul>
       Every panel can be moved: drag it by an empty part; a double click puts it back.<br />
+      <b>Keys and gestures</b>
+      <ul>
+        <li>Drag on empty space: turn the view; scroll or pinch: zoom. Space: play / pause; R: restart (in Play,
+          every bird back at the start); N: a new live flight.</li>
+        <li>Sandbox and Play: drag a target or an obstacle to move it. Up and down: Shift + drag, or, on a touch
+          screen, a second finger down anywhere on the screen, before or after the one on the object.</li>
+        <li>Sandbox: a tap on a target or an obstacle picks it (it glows) and the height and size sliders then
+          change it; choosing Target or Obstacle unpicks it, so that the sliders set the next one placed.
+          Esc unpicks, Delete removes.</li>
+        <li>Play: F makes the object picked follow the mouse (Shift held: up and down), F again or Esc stops it;
+          Delete removes the obstacle picked.</li>
+      </ul>
       <b>What you see</b>
       <ul>
         <li><span class="swatch" style="background: #f0a020"></span><b>Orange ball</b>: the target zone, 3 cm in radius.
