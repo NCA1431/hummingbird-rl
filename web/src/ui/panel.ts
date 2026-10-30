@@ -26,7 +26,7 @@ import type { FluidScales } from "../sim/fluid";
 import { type AirMode, paletteCss } from "../view/air";
 import { BIRD_COLORS } from "../view/bird";
 import { type BirdSlot, SandboxPanel } from "./sandboxPanel";
-import { TASK_NAMES, ending, label } from "./words";
+import { TASK_NAMES, counterpart, ending, label } from "./words";
 
 export const SPEEDS: [number, string][] = [
   [1 / 64, "1/64"], [1 / 16, "1/16"], [1 / 4, "1/4"], [1, "1"], [2, "2"], [4, "4"],
@@ -283,7 +283,7 @@ export class Panel {
         ? ["pid", "lqr", ...this.networks.filter((n) => n.task === task).map((n) => n.name)]
         : [...new Set(this.entries.filter((e) => e.task === task).map((e) => e.policy))];
     names.sort(byRank);
-    keep(this.policy, names.map((p) => new Option(label(p), p)));
+    keep(this.policy, names.map((p) => new Option(label(p), p)), counterpart); // same role on a new task
     if (this.mode === "sandbox") this.sandbox.setControllers(names.map((p) => [p, label(p)]));
     if (!fly) return;
     if (this.mode === "live") this.chooseLive(newTask);
@@ -519,8 +519,15 @@ function place(mark: HTMLElement, f: number | null): void {
 }
 
 /** Replaces a select's options, keeping the current choice when it is still offered. */
-function keep(select: HTMLSelectElement, options: HTMLOptionElement[]): void {
+/**
+ * New options for a menu, keeping its choice if it is still offered. Otherwise `instead` may name
+ * another value to show (the counterpart of a controller on a new task); else the first option.
+ */
+function keep(select: HTMLSelectElement, options: HTMLOptionElement[],
+              instead?: (before: string, values: string[]) => string | undefined): void {
   const before = select.value;
   select.replaceChildren(...options);
-  if (options.some((o) => o.value === before)) select.value = before;
+  const values = options.map((o) => o.value);
+  const value = values.includes(before) ? before : instead?.(before, values);
+  if (value !== undefined) select.value = value;
 }

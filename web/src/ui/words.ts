@@ -77,9 +77,38 @@ function variantWords(variant: string): string {
  *   sac_goto_randomised_s2_best          -> "SAC · randomised · #2 · best"
  * "best" is the checkpoint with the best validation score, not the last one.
  */
+/** A run name: algorithm, task, training variant, seed and, for the best checkpoint, _best. */
+const RUN = /^(ppo|sac|td3)_(hover|goto|obstacles|navigation)(?:_(.+?))?_s(\d+)(_best)?$/;
+
 export function label(p: string): string {
   if (p === "pid" || p === "lqr") return p.toUpperCase();
-  const m = /^(ppo|sac|td3)_(hover|goto|obstacles|navigation)(?:_(.+?))?_s(\d+)(_best)?$/.exec(p);
+  const m = RUN.exec(p);
   if (!m) return p;
   return [m[1].toUpperCase(), m[3] ? variantWords(m[3]) : "", `#${m[4]}`, m[5] ? "best" : ""].filter(Boolean).join(" · ");
+}
+
+/**
+ * The controller that plays the same part among `offered`, when the task changes and `name` is no
+ * longer there: networks are trained for one task, so "PPO · randomised · #2" on hover becomes
+ * ppo_goto_randomised_s2 on go-to-point. Same algorithm required; then, in this order of
+ * importance, the same training variant, the same seed and the same checkpoint (final or best).
+ * PID and LQR fly every task. Undefined when no network of that algorithm is offered.
+ */
+export function counterpart(name: string, offered: string[]): string | undefined {
+  if (offered.includes(name)) return name;
+  const parts = (n: string) => {
+    const m = RUN.exec(n);
+    return m ? { algo: m[1], variant: m[3] ?? "", seed: m[4], best: Boolean(m[5]) } : null;
+  };
+  const want = parts(name);
+  if (!want) return undefined;
+  let found: string | undefined;
+  let score = -1;
+  for (const n of offered) {
+    const got = parts(n);
+    if (!got || got.algo !== want.algo) continue;
+    const s = 4 * Number(got.variant === want.variant) + 2 * Number(got.seed === want.seed) + Number(got.best === want.best);
+    if (s > score) [found, score] = [n, s];
+  }
+  return found;
 }

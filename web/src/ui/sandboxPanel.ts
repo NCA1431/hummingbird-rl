@@ -33,6 +33,7 @@ import { Rng } from "../sim/random";
 import { sampleScene } from "../sim/sampling";
 import type { Scene } from "../sim/world";
 import { BIRD_COLORS } from "../view/bird";
+import { counterpart } from "./words";
 
 const p = DEFAULT_PARAMS;
 const HINT_KEY = "hummingbird-rl.sandbox-hint-closed";
@@ -428,11 +429,15 @@ export class SandboxPanel {
     this.h.changed(false);
   }
 
-  /** The controllers that can fly this task, as (value, label); birds keep theirs if still offered. */
+  /**
+   * The controllers that can fly this task, as (value, label). A bird keeps its controller if it is
+   * still offered, or takes its counterpart on the new task (same algorithm, variant and seed), so
+   * that a comparison set up on one task survives a change of task; PID otherwise.
+   */
   setControllers(options: [string, string][]): void {
     this.controllers = options;
-    const values = new Set(options.map(([v]) => v));
-    for (const s of this.slots) if (!values.has(s.controller)) s.controller = options[0][0];
+    const values = options.map(([v]) => v);
+    for (const s of this.slots) s.controller = counterpart(s.controller, values) ?? values[0];
     this.renderBirds();
   }
 

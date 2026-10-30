@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ending, label } from "../src/ui/words";
+import { counterpart, ending, label } from "../src/ui/words";
 
 describe("controller names", () => {
   it("say the algorithm, how it was trained, and which seed", () => {
@@ -34,5 +34,33 @@ describe("endings", () => {
     expect(ending("goto", false, "crash", false)).toBe("hit the ground");
     expect(ending("navigation", false, "no_course", true)).toMatch(/Target tool/);
     expect(ending("goto", false, "some_new_reason", false)).toBe("some new reason");
+  });
+});
+
+describe("a controller's counterpart on another task", () => {
+  const goto = ["pid", "lqr", "ppo_goto_normal_s1", "ppo_goto_normal_s2", "ppo_goto_randomised_s2",
+    "sac_goto_randomised_s1", "sac_goto_randomised_s1_best", "td3_goto_normal_s3"];
+
+  it("keeps a controller that is still offered, PID and LQR on every task", () => {
+    expect(counterpart("pid", goto)).toBe("pid");
+    expect(counterpart("lqr", goto)).toBe("lqr");
+    expect(counterpart("ppo_goto_normal_s2", goto)).toBe("ppo_goto_normal_s2");
+  });
+
+  it("finds the same algorithm, variant, seed and checkpoint on the new task", () => {
+    expect(counterpart("ppo_hover_randomised_s2", goto)).toBe("ppo_goto_randomised_s2");
+    expect(counterpart("sac_hover_randomised_s1_best", goto)).toBe("sac_goto_randomised_s1_best");
+    expect(counterpart("sac_hover_randomised_s1", goto)).toBe("sac_goto_randomised_s1");
+  });
+
+  it("gives up the seed before the variant, and the variant before the algorithm", () => {
+    expect(counterpart("ppo_hover_randomised_s3", goto)).toBe("ppo_goto_randomised_s2");
+    expect(counterpart("ppo_navigation_from_obstacles_s1", goto)).toBe("ppo_goto_normal_s1");
+    expect(counterpart("td3_hover_randomised_s1", goto)).toBe("td3_goto_normal_s3");
+  });
+
+  it("has none when no network of that algorithm flies the new task", () => {
+    expect(counterpart("td3_hover_normal_s1", ["pid", "lqr", "ppo_obstacles_normal_s1"])).toBeUndefined();
+    expect(counterpart("something_else", goto)).toBeUndefined();
   });
 });
