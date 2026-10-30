@@ -225,19 +225,30 @@ export class Panel {
       b.onclick = () => h.camera(b.dataset.camera as CameraMode);
     });
     const scale = $<HTMLButtonElement>("scale");
-    scale.onclick = () => {
-      const big = scale.dataset.big !== "1";
-      scale.dataset.big = big ? "1" : "0";
+    const airMenu = $<HTMLSelectElement>("air");
+    // The air is simulated around the bird at its real size: drawn 3 times larger, the bird would
+    // spread its wings far outside the air they push. So with the air on we draw the bird at its
+    // real size, and the visitor's choice comes back when the air is turned off.
+    const applyScale = () => {
+      const air = airMenu.value !== "off";
+      const big = scale.dataset.big === "1" && !air;
+      scale.disabled = air;
+      scale.title = air ? "With the air shown, the bird is drawn at its real size, as the air is" : "Draw the birds 3 times larger, to see them from afar";
       scale.textContent = big ? "Bird ×3" : "Bird ×1";
       h.scale(big ? 3 : 1);
     };
+    scale.title = "Draw the birds 3 times larger, to see them from afar";
+    scale.onclick = () => {
+      scale.dataset.big = scale.dataset.big === "1" ? "0" : "1";
+      applyScale();
+    };
     const wind = $<HTMLInputElement>("wind");
     wind.onchange = () => h.wind(wind.checked);
-    const airMenu = $<HTMLSelectElement>("air");
     const airBox = $<HTMLInputElement>("air-box");
     airMenu.onchange = () => {
       h.air(airMenu.value as AirMode);
       $<HTMLLabelElement>("air-box-label").hidden = airMenu.value === "off";
+      applyScale();
     };
     airBox.onchange = () => h.airBox(airBox.checked);
     const trails = $<HTMLInputElement>("trails");
