@@ -27,7 +27,7 @@ shared and what I learned.*
 > **What we built and ran**
 > - **124 training runs** (102 reported, the others pilots and tuning), **181 million environment steps**: about 840 hours, or 35 days, of simulated flight, computed in about 200 CPU-hours on one laptop.
 > - **122 controllers evaluated** on up to five test suites: about **78,000 evaluation episodes**, drawn from held-out seeds that every controller faces in the same order.
-> - **A simulator and an interactive demo:** the physics in Python with 144 tests, ported to the browser where it reproduces the Python results to 4·10⁻¹² (123 more tests), with a live 3D simulation of the air around the bird.
+> - **A simulator and an interactive demo:** the physics in Python with 144 tests, ported to the browser where it reproduces the Python results to 4·10⁻¹² (124 more tests), with a live 3D simulation of the air around the bird.
 
 <!-- toc -->
 

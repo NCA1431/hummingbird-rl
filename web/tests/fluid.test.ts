@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { Fluid, type FluidBird, H, IX, N } from "../src/sim/fluid";
 import { DEFAULT_PARAMS, type Vec3, hoverAmplitude, weight } from "../src/sim/params";
-import { C_AIR, TRACERS, Tracers, inferno, rdbu, viridis, windAirSpeed } from "../src/sim/fluidView";
+import { C_AIR, TRACERS, Tracers, inferno, rdbu, sheetFacing, viridis, windAirSpeed } from "../src/sim/fluidView";
 
 const p = DEFAULT_PARAMS;
 const RHO = 1.225;
@@ -170,6 +170,17 @@ describe("laser sheet, turning", () => {
     const a = (20 * Math.PI) / 180; // the camera turns by 20° around the bird
     t.aim(at, [at[0] - Math.cos(a), at[1], at[2] - Math.sin(a)], f);
     before.forEach((b, p) => inSheet(p).forEach((x, i) => expect(x).toBeCloseTo(b[i], 12)));
+  });
+
+  it("faces the way the camera looks, from its orientation only: steady even from straight above", () => {
+    const c = Math.cos(Math.PI / 6);
+    const close = (a: Vec3, b: Vec3) => a.forEach((x, i) => expect(x).toBeCloseTo(b[i], 12));
+    close(sheetFacing([0, -0.5, c], [0, c, 0.5]), [0, 0, 1]); // 30° down, towards +z
+    close(sheetFacing([-c, 0.5, 0], [0.5, c, 0]), [-1, 0, 0]); // 30° up, towards -x
+    close(sheetFacing([0, 0, -1], [0, 1, 0]), [0, 0, -1]); // level
+    // Straight down (the Top camera), the top of the screen towards +x: the sheet faces +x. The
+    // bird below plays no part, so its small moves no longer turn the sheet.
+    close(sheetFacing([0, -1, 0], [1, 0, 0]), [1, 0, 0]);
   });
 });
 

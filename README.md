@@ -5,6 +5,12 @@ learning algorithms (PPO, SAC, TD3 with Stable-Baselines3) and by two classical 
 and an LQR), on four tasks of increasing difficulty: hover and recover, go to a point, fly around obstacles,
 follow a course.
 
+<p align="center">
+  <img src="docs/media/air.webp" width="640" alt="The 3D hummingbird hovering, wrapped in the vortex rings its wings shed, then seen through a laser sheet of tracer particles pushed down by its wingbeat">
+  <br>
+  <em>The bird and the air its wings push down, simulated live in the browser: vortex tubes, then a laser sheet.</em>
+</p>
+
 **[Interactive demo](https://nca1431.github.io/hummingbird-rl/)** (every controller flies live in your
 browser) · **[W&B report](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA)** (the results, with interactive charts) ·
 **[The algorithms explained (PDF)](docs/algorithms_report.pdf)** (from PID and LQR to PPO, TD3 and SAC)
@@ -31,7 +37,7 @@ says how the work was shared.*
 
 124 training runs (181 million environment steps, about 200 CPU-hours on one laptop), 122 controllers
 evaluated on about 78,000 held-out episodes, a simulator with 144 tests, and a browser port of it that
-reproduces the Python results to 4·10⁻¹² (123 more tests).
+reproduces the Python results to 4·10⁻¹² (124 more tests).
 
 ## Setup (Windows, PowerShell, with uv)
 
@@ -107,6 +113,18 @@ controllers in exactly the same situation. In **Play** the birds fly without end
 and the obstacles, or let the target follow the mouse; you can hide the target from the birds to see what
 each controller does without a goal. The air around the bird is a real-time fluid simulation, shown as
 smoke, a laser sheet or vortex tubes. The Legend lists the keys and gestures.
+
+<p align="center">
+  <img src="docs/media/play.webp" width="720" alt="Play mode: four birds, each flown by a different controller, chase a target dragged around with the mouse">
+  <br>
+  <em>Play: the PID, the LQR and two PPO agents chase a target dragged with the mouse; a bird that falls starts again.</em>
+</p>
+
+<p align="center">
+  <img src="docs/media/sandbox.webp" width="720" alt="Sandbox mode: the PID and a SAC agent fly a navigation course between obstacles, in strong wind and with a weakened wing">
+  <br>
+  <em>Sandbox: the PID and SAC on a navigation course, in a wind of 25% of the bird's weight, with the left wing weakened by 30%.</em>
+</p>
 
 ```powershell
 uv run python scripts/export_web.py episodes --policy pid --tasks hover goto obstacles navigation

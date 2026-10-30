@@ -30,7 +30,7 @@ import * as THREE from "three";
 
 import type { WingCommand } from "../sim/aero";
 import { Fluid, type FluidBird, type FluidScales, type FluidView, N, SIZE } from "../sim/fluid";
-import { TRACERS, windAirSpeed } from "../sim/fluidView";
+import { TRACERS, sheetFacing, windAirSpeed } from "../sim/fluidView";
 import type { StepReply, StepRequest } from "../sim/fluidWorker";
 import type { BirdParams, Vec3 } from "../sim/params";
 import type { Quat } from "../sim/rotations";
@@ -279,17 +279,21 @@ export class Air {
   /**
    * Moves the air on by `dt` seconds of simulated time. `center`: the followed bird, which the
    * box follows; `windForce`: the wind's push (N), the same everywhere; `birds`: every bird on
-   * screen (those inside the box push its air); `eye`: the camera, which the laser sheet faces.
+   * screen (those inside the box push its air); `camera`: the laser sheet faces the way it looks.
    * The worker gets the time as soon as it is free; while it works, the time adds up.
    */
-  update(dt: number, center: Vec3, windForce: Vec3, birds: AirBird[], eye: Vec3): void {
+  update(dt: number, center: Vec3, windForce: Vec3, birds: AirBird[], camera: THREE.Camera): void {
     if (this.mode === "off") return;
+    // The sheet's normal, from where the camera looks (not from where it is: see sheetFacing).
+    const forward = camera.getWorldDirection(new THREE.Vector3());
+    const up = new THREE.Vector3(0, 1, 0).transformDirection(camera.matrixWorld);
+    const facing = sheetFacing(forward.toArray() as Vec3, up.toArray() as Vec3);
+    // The worker aims the sheet from a point: we give it one 1 m in front of the sheet.
+    const eye: Vec3 = [center[0] - facing[0], center[1], center[2] - facing[2]];
     if (this.mode === "sheet") {
       // The backdrop follows the bird and the camera at every frame (not at the solver's pace,
       // nor by whole cells as the box does), facing the camera, just behind the sheet.
-      const n = this.sheetNormal.set(center[0] - eye[0], 0, center[2] - eye[2]);
-      if (n.lengthSq() < 1e-12) n.set(0, 0, 1);
-      n.normalize();
+      const n = this.sheetNormal.set(facing[0], 0, facing[2]);
       const middle = Fluid.originFor(center)[1] + SIZE / 2;
       this.backdrop.position.set(center[0], middle, center[2]).addScaledVector(n, 0.012);
       this.backdrop.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);

@@ -232,6 +232,7 @@ const panel = new Panel({
   },
   async sandbox(c: SandboxChoice) {
     const mine = ++request;
+    cancelDrag(); // the scene is new: the object dragged may be gone, or have another index
     const resetCamera = c.resetCamera || !episode;
     if (c.pilots.length === 0) {
       show([waitingEpisode(c.task, c.scene, c.conditions)], resetCamera);
@@ -286,6 +287,7 @@ const panel = new Panel({
       }
       case "remove":
         if (picked?.kind !== "obstacle") return;
+        cancelDrag();
         se.removeObstacle(picked.index);
         world.loadPlay(se.scene);
         world.playTargetSeen(se.seesTarget);
@@ -459,7 +461,7 @@ function framePlay(dt: number): void {
     return { s, cmd, still };
   });
   for (let i = samples.length; i < birds.length; i++) birds[i].root.visible = false;
-  followed = Math.min(followed, samples.length - 1);
+  followed = Math.max(0, Math.min(followed, samples.length - 1)); // never -1, even after a moment without birds
   const f = samples[followed];
   if (!f) return;
 
@@ -480,7 +482,7 @@ function framePlay(dt: number): void {
       phase: phases[i],
       flying: !x.still,
     })),
-    stage.camera.position.toArray() as [number, number, number],
+    stage.camera,
   );
   panel.airKey(air.current, air.scales);
   if (follow) stage.follow(new THREE.Vector3(...f.s.pos));
@@ -555,7 +557,7 @@ stage.run((dt) => {
       phase: x.phase,
       flying: !x.still,
     })),
-    stage.camera.position.toArray() as [number, number, number],
+    stage.camera,
   );
   panel.airKey(air.current, air.scales);
   world.updateOthers(samples.filter((_, i) => i !== followed).map((x) => x.s.index));
@@ -684,6 +686,20 @@ let drag: {
 } | null = null;
 const touches = new Set<number>(); // the fingers on the screen now
 
+/**
+ * Drops a drag under way when the scene changes under it: an obstacle removed with the Delete key,
+ * or, on a touch screen, with a second finger on a button. The drag holds the object by its index,
+ * which would then point at another object, or at none.
+ */
+function cancelDrag(): void {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  stage.controls.enabled = d.controls;
+  if (canvas.hasPointerCapture(d.pointerId)) canvas.releasePointerCapture(d.pointerId);
+  canvas.style.cursor = "";
+}
+
 const inPlay = () => panel.mode === "play" && session !== null && worldIsPlay;
 
 /** The targets and obstacles that can be dragged now, where they are. */
@@ -765,6 +781,7 @@ function anchor(d: NonNullable<typeof drag>, e: PointerEvent): void {
 canvas.addEventListener(
   "pointerdown",
   (e) => {
+    if (e.button !== 0) return; // the right button pans the camera, even over an object
     const it = itemAt(e);
     if (!it) return; // the camera turns
     e.stopImmediatePropagation();
@@ -797,6 +814,8 @@ canvas.addEventListener(
 );
 canvas.addEventListener("pointermove", (e) => {
   if (drag && e.pointerId === drag.pointerId) {
+    // The mode changed during the drag (a second finger on a mode button): the object is not there any more.
+    if (drag.play !== inPlay() || (!drag.play && panel.mode !== "sandbox")) return cancelDrag();
     if (lifting(drag, e) !== drag.vertical) anchor(drag, e);
     const c = drag.pos;
     let to: Vec3 | null = null;

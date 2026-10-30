@@ -128,6 +128,24 @@ export function paint(f: Fluid, view: FluidView, center: Vec3, out: Uint8Array):
 
 // --- Tracers in a laser sheet -----------------------------------------------------------
 
+/**
+ * The horizontal direction the laser sheet faces, from the camera's orientation alone: where
+ * the camera looks, or, when it looks straight down (the Top camera), the top of the screen.
+ * We first took the direction from the camera to the bird; seen from above, that direction is
+ * only a few millimetres long and turns with every small move of the bird, so the sheet (a
+ * line from up there) spun around, faster at higher speeds. `forward` and `up`: the camera's
+ * viewing and up directions, in world coordinates.
+ */
+export function sheetFacing(forward: Vec3, up: Vec3): Vec3 {
+  // Looking down, the top of the screen points the way the camera faces; looking up, the other
+  // way. Adding it to the view direction gives the facing at any tilt, never a zero vector.
+  const s = forward[1] < 0 ? 1 : -1;
+  const x = forward[0] + s * up[0];
+  const z = forward[2] + s * up[2];
+  const l = Math.hypot(x, z);
+  return l < 1e-9 ? [0, 0, 1] : [x / l, 0, z / l];
+}
+
 export const TRACERS = 12000;
 const SHEET_HALF = 0.006; // m, half the thickness of the sheet
 const LIFE = 1.5; // s of simulated time, then a tracer is seeded again

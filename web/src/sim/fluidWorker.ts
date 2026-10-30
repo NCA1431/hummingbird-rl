@@ -16,7 +16,7 @@ import type { Vec3 } from "./params";
 export interface StepRequest {
   dt: number; // s of simulated time to advance (0: only repaint, e.g. a new view while paused)
   center: Vec3; // the followed bird
-  eye: Vec3; // the camera, which the laser sheet faces
+  eye: Vec3; // a point in front of the laser sheet, on the camera's side: the sheet faces it
   wind: Vec3; // m/s, the air speed of the wind
   birds: FluidBird[];
   obstacles: { center: Vec3; radius: number }[] | null; // null: unchanged
