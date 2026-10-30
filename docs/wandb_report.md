@@ -19,7 +19,7 @@ code and to draft the text, which I reviewed and corrected. The end of the repor
 shared and what I learned.*
 
 > **Key findings**
-> - **Classical control is hard to beat in calm air.** PID and LQR succeed in 100% of the hover and go-to-point tests, and the PID, thanks to its integrators, is the most robust controller to wind and wing damage (robust area 0.82 out of 1).
+> - **Classical control is hard to beat in calm air.** PID and LQR succeed in 100% of the hover and go-to-point tests. Under wind and wing damage, the PID, thanks to its integrators, stays the most robust controller on hover (robust area 0.82 out of 1). On go-to-point, only agents trained in randomised conditions beat it (PPO 0.96 against 0.81).
 > - **Learning pays off where planning matters.** Around obstacles SAC succeeds in 98% and PPO in 89% of the episodes, against 44 to 52% for the classical controllers. On the long navigation course the cautious PID stays best (41%, PPO 18%, 27% with transfer).
 > - **Train in randomised conditions.** Trained in calm air, every learned policy loses to the PID under wind (robust area 0.08 to 0.39). Trained with random wind, mass and wing damage, PPO reaches 0.96 on go-to-point, and after a sudden 40% wing failure it deviates by 1.5 cm, against 9.1 cm for the PID.
 > - **PPO is the most reliable learner; SAC and TD3 the most sample-efficient but unstable:** their success swings during training (SAC ends at 64%, its best checkpoint scored 99%).
@@ -27,7 +27,7 @@ shared and what I learned.*
 > **What we built and ran**
 > - **124 training runs** (102 reported, the others pilots and tuning), **181 million environment steps**: about 840 hours, or 35 days, of simulated flight, computed in about 200 CPU-hours on one laptop.
 > - **122 controllers evaluated** on up to five test suites: about **78,000 evaluation episodes**, drawn from held-out seeds that every controller faces in the same order.
-> - **A simulator and an interactive demo:** the physics in Python with 144 tests, ported to the browser where it reproduces the Python results to 4·10⁻¹² (105 more tests), with a live 3D simulation of the air around the bird.
+> - **A simulator and an interactive demo:** the physics in Python with 144 tests, ported to the browser where it reproduces the Python results to 4·10⁻¹² (119 more tests), with a live 3D simulation of the air around the bird.
 
 <!-- toc -->
 
@@ -143,7 +143,8 @@ simulator is ported line by line to TypeScript and the trained networks are expo
 is flown by the same physics and the same policies as in this report. **Recorded** replays test episodes
 exactly as they were measured; **Live** draws new random episodes; in the **Sandbox** you place targets
 and obstacles, change the wind, the mass and the damage of each wing, and fly up to four birds with
-different controllers side by side. The 3D hummingbird beats its wings with the measured kinematics, and
+different controllers side by side; in **Play** the birds fly without end while you drag the target or the
+obstacles, and you can hide the target from them to see what each controller does without a goal. The 3D hummingbird beats its wings with the measured kinematics, and
 the air around it is a real-time fluid simulation pushed by the wings, shown as smoke, a laser sheet or
 vortex tubes.
 

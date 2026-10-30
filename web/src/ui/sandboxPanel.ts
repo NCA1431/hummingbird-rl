@@ -1,5 +1,10 @@
 /**
- * The sandbox's controls: tools to build the scene, the birds to fly it, and the conditions.
+ * The controls of the Sandbox and of Play: the scene, the birds, and the conditions.
+ *
+ * The two modes share the birds and the conditions; the Sandbox adds the tools
+ * that build a scene and the sudden failure, Play its own section (move the
+ * target and the obstacles, hide the target from the birds). In Play every
+ * change acts at once on the birds in flight instead of flying again.
  *
  * A panel on the right of the page, built here rather than in index.html
  * because most of it is a list of sliders. Every change calls `changed`, and
@@ -40,15 +45,35 @@ const HINT_KEY = "hummingbird-rl.sandbox-hint-closed";
 
 /** One bird of the sandbox: who flies it, and whether it is drawn as the 3D model. */
 export interface BirdSlot {
+  id: number; // kept when another bird is removed (Play keeps each bird flying where it is)
   controller: string;
   model: boolean;
 }
 
+/** What the Play section asks for. */
+export type PlayEdit =
+  | { kind: "add" } // a new obstacle
+  | { kind: "remove" } // the obstacle picked
+  | { kind: "height"; value: number } // of the object picked (m)
+  | { kind: "size"; value: number } // radius of the obstacle picked (m)
+  | { kind: "seeTarget"; on: boolean }
+  | { kind: "follow"; on: boolean } // the object picked follows the mouse
+  | { kind: "restart" }; // every bird back at the start
+
+/** The object picked in Play, as the section shows it. */
+export interface PlaySelection {
+  kind: "target" | "obstacle";
+  index: number;
+  height: number; // m
+  radius: number; // m
+}
+
 export interface SandboxHandlers {
-  changed(resetCamera: boolean): void; // fly again
+  changed(resetCamera: boolean): void; // fly again (in Play: the birds or the conditions changed)
   tool(tool: Tool): void;
   looks(slots: BirdSlot[]): void; // 3D model or drawn bird, without flying again
   follow(index: number): void; // which bird the camera and the HUD follow
+  play(edit: PlayEdit): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = ""): HTMLElementTagNameMap[K] {
@@ -65,7 +90,9 @@ const css = (color: number) => `#${color.toString(16).padStart(6, "0")}`;
  * for all tasks read as if every task had a course of waypoints.
  */
 function sceneHelp(task: string): string {
-  const see = "The see-through ball shows where the next one goes, and how high (the height slider).";
+  const see =
+    "The see-through ball shows where the next one goes, and how high (the height slider). " +
+    "A target or an obstacle already placed can be dragged to move it (Shift + drag: up and down).";
   const nearest = "The controllers only see the 5 nearest obstacles, but the bird can hit any of them.";
   switch (task) {
     case "hover":
@@ -82,6 +109,21 @@ function sceneHelp(task: string): string {
         `Clear removes them all to build a course from scratch. ${see} ${nearest}`;
   }
 }
+
+const PLAY_HELP =
+  "The birds fly without end after the orange target. Drag the target or an obstacle to move it " +
+  "(on a computer, Shift + drag moves it up and down; the height slider does it everywhere); drag " +
+  "elsewhere to turn the view. F: the object picked (the target or an obstacle) follows the mouse without " +
+  "clicking, and up and down with Shift held. A bird that falls or " +
+  "touches an obstacle starts again from the start point a second later. None of them was trained on a " +
+  "moving target or moving obstacles: slow moves look to them like a series of new targets, fast ones " +
+  "may make them overshoot. Networks trained on hover or go-to-point never saw obstacles and do not see " +
+  "them here; PID and LQR do.";
+
+const HIDE_HELP =
+  "Off: the birds are no longer told where the target is (its place in the 48 numbers they receive is " +
+  "empty). No controller met that in training: PID and LQR then hold where they are; what a network " +
+  "does is an extrapolation, worth watching.";
 
 /** Changes the explanation of a section made by `section`. */
 function setHelp(box: HTMLDivElement, help: string): void {
@@ -111,8 +153,25 @@ export class SandboxPanel {
   seed = newSeed();
   height = 0.5; // m, height of what is placed next
   radius = 0.07; // m, radius of the next obstacle
-  slots: BirdSlot[] = [{ controller: "pid", model: true }];
+  slots: BirdSlot[] = [{ id: 0, controller: "pid", model: true }];
   followed = 0;
+  inPlay = false;
+  seesTarget = true; // Play: the birds are told where the target is
+  following = false; // Play: the object picked follows the mouse
+  private nextId = 1;
+  private readonly sceneBox: HTMLDivElement;
+  private readonly failureBox: HTMLDivElement;
+  private readonly playBox: HTMLDivElement;
+  private readonly title: HTMLElement;
+  private readonly again: HTMLButtonElement;
+  private readonly picked: HTMLDivElement;
+  private readonly removeButton: HTMLButtonElement;
+  private readonly followButton: HTMLButtonElement;
+  private readonly playHeight: HTMLInputElement;
+  private readonly playSize: HTMLInputElement;
+  private readonly playSizeRow: HTMLLabelElement;
+  private readonly playHeightValue: HTMLSpanElement;
+  private readonly playSizeValue: HTMLSpanElement;
   private modelAvailable = true; // false if the 3D model could not be loaded
   private controllers: [string, string][] = [["pid", "PID"], ["lqr", "LQR"]]; // (value, label)
   private readonly birdsBox: HTMLDivElement;
@@ -126,7 +185,13 @@ export class SandboxPanel {
   private readonly sliders: (() => void)[] = []; // refreshers, after the settings change from outside
 
   constructor(private readonly h: SandboxHandlers) {
-    const body = this.root.querySelector<HTMLDivElement>(".sandbox-body")!;
+    const root = this.root.querySelector<HTMLDivElement>(".sandbox-body")!;
+    this.title = this.root.querySelector<HTMLElement>("b")!;
+    // Play's own section, then the Sandbox's scene tools: one of the two is shown.
+    this.playBox = el("div");
+    this.sceneBox = el("div");
+    root.append(this.playBox, this.sceneBox);
+    let body: HTMLElement = this.sceneBox;
 
     // The hint, until it is closed once.
     let closed = false;
@@ -137,7 +202,7 @@ export class SandboxPanel {
     }
     if (!closed) {
       const hint = el("div", { class: "hint" });
-      hint.append("Choose Target or Obstacle, then click on the ground; drag to turn the view. Every change flies again.");
+      hint.append("Choose Target or Obstacle, then click on the ground; drag a placed one to move it; drag elsewhere to turn the view. Every change flies again.");
       const x = el("button", { class: "close", title: "Hide this hint" }, "×");
       x.onclick = () => {
         hint.remove();
@@ -180,7 +245,58 @@ export class SandboxPanel {
     this.notes = el("div", { class: "label sandbox-notes" });
     body.append(this.notes);
 
-    // Birds.
+    // Play: moving things, and what the birds are told.
+    const play = this.playBox;
+    play.append(section("Play", PLAY_HELP));
+    play.append(el("div", { class: "label" }, "Drag the target or an obstacle. Shift + drag: up and down."));
+    const objects = el("div", { class: "row" });
+    const addObstacle = el("button", { title: "A new obstacle near the start" }, "+ obstacle");
+    addObstacle.onclick = () => this.h.play({ kind: "add" });
+    this.removeButton = el("button", { title: "Remove the obstacle picked (Delete key)" }, "Remove");
+    this.removeButton.onclick = () => this.h.play({ kind: "remove" });
+    this.followButton = el(
+      "button",
+      { title: "The object picked (the target or an obstacle) follows the mouse, without clicking; Shift: up and down (key F)" },
+      "Follow the mouse (F)",
+    );
+    this.followButton.onclick = () => this.setFollowing(!this.following);
+    // A phone or a tablet has no pointer between touches: nothing to follow there.
+    if (window.matchMedia?.("(hover: none)").matches) this.followButton.hidden = true;
+    objects.append(addObstacle, this.removeButton, this.followButton);
+    play.append(objects);
+    this.picked = el("div", { class: "label" });
+    play.append(this.picked);
+    const live = (name: string, min: number, max: number, step: number, act: (v: number) => void, show: (v: number) => string) => {
+      const row = el("label", { class: "slider" });
+      const input = el("input", { type: "range", min: String(min), max: String(max), step: String(step) });
+      const value = el("span", { class: "value" });
+      // Here a slider acts while it moves: the birds react live, there is no flight to redo.
+      input.oninput = () => {
+        value.textContent = show(Number(input.value));
+        act(Number(input.value));
+      };
+      row.append(el("span", { class: "name" }, name), input, value);
+      play.append(row);
+      return { row, input, value };
+    };
+    const centimetres = (v: number) => `${Math.round(100 * v)} cm`;
+    const hgt = live("height", 0.05, 1.1, 0.01, (v) => this.h.play({ kind: "height", value: v }), centimetres);
+    const size = live("size", 0.03, 0.15, 0.005, (v) => this.h.play({ kind: "size", value: v }), (v) => `r ${centimetres(v)}`);
+    [this.playHeight, this.playHeightValue] = [hgt.input, hgt.value];
+    [this.playSize, this.playSizeValue, this.playSizeRow] = [size.input, size.value, size.row];
+    const sees = el("input", { type: "checkbox" });
+    sees.checked = true;
+    sees.onchange = () => {
+      this.seesTarget = sees.checked;
+      this.h.play({ kind: "seeTarget", on: sees.checked });
+    };
+    const seesLabel = el("label", { class: "label", title: HIDE_HELP });
+    seesLabel.append(sees, " the birds see the target");
+    play.append(seesLabel);
+    this.showSelection(null);
+
+    // Birds and conditions: both modes.
+    body = root;
     body.append(
       section(
         "Birds",
@@ -192,7 +308,9 @@ export class SandboxPanel {
     this.birdsBox = el("div", { class: "birds" });
     body.append(this.birdsBox);
     const again = el("button", { title: "Same scene and conditions, a new start push and new noise" }, "Fly again");
+    this.again = again;
     again.onclick = () => {
+      if (this.inPlay) return this.h.play({ kind: "restart" });
       this.seed = newSeed();
       this.h.changed(false);
     };
@@ -201,7 +319,7 @@ export class SandboxPanel {
       if (this.slots.length >= MAX_BIRDS) return;
       const used = new Set(this.slots.map((s) => s.controller));
       const next = this.controllers.find(([v]) => !used.has(v)) ?? this.controllers[0];
-      this.slots.push({ controller: next[0], model: false });
+      this.slots.push({ id: this.nextId++, controller: next[0], model: false });
       this.renderBirds();
       this.h.changed(false);
     };
@@ -234,6 +352,10 @@ export class SandboxPanel {
     this.slider(body, "left wing", 0, 0.6, 0.05, () => s.damage[0], (v) => (s.damage[0] = v), lost, "force lost from the start");
     this.slider(body, "right wing", 0, 0.6, 0.05, () => s.damage[1], (v) => (s.damage[1] = v), lost, "force lost from the start");
 
+    // The sudden failure needs a timeline to be scheduled on: Sandbox only.
+    this.failureBox = el("div");
+    body.append(this.failureBox);
+    body = this.failureBox;
     body.append(section("Sudden failure", "One wing suddenly loses part of its force during the flight, at the time set (red tick on the timeline)."));
     const wing = el("select", { "aria-label": "Sudden failure" });
     wing.append(new Option("none", "-1"), new Option("left wing", "0"), new Option("right wing", "1"));
@@ -246,6 +368,7 @@ export class SandboxPanel {
     this.slider(body, "at", 0.2, 4.5, 0.1, () => s.failureTime, (v) => (s.failureTime = v), (v) => `${v.toFixed(1)} s`);
     this.slider(body, "force lost", 0.1, 0.6, 0.05, () => s.failureAmount, (v) => (s.failureAmount = v), pct);
 
+    body = root;
     const noise = el("input", { type: "checkbox" });
     noise.onchange = () => {
       s.noise = noise.checked;
@@ -422,6 +545,15 @@ export class SandboxPanel {
     this.h.changed(false);
   }
 
+  /** A target or an obstacle dragged to `point`: the birds fly again with it there. */
+  moveItem(kind: "target" | "obstacle", index: number, point: Vec3): void {
+    const next = structuredClone(this.scene);
+    if (kind === "target") next.targets[index] = [...point] as Vec3;
+    else next.obstacles[index] = { center: [...point] as Vec3, radius: next.obstacles[index].radius };
+    this.scene = next;
+    this.h.changed(false);
+  }
+
   /** A click on a target or an obstacle with the Erase tool. */
   eraseItem(kind: "target" | "obstacle", index: number): void {
     if (this.tool !== "erase" || !canErase(this.task, kind)) return;
@@ -456,8 +588,39 @@ export class SandboxPanel {
     return !(this.task !== "hover" && this.scene.targets.length === 0);
   }
 
-  show(visible: boolean): void {
+  /** Shown for the Sandbox, or for Play (`play`), which has its own section instead of the scene tools. */
+  show(visible: boolean, play = false): void {
     this.root.hidden = !visible;
-    if (!visible) this.setTool(null);
+    this.inPlay = play;
+    this.title.textContent = play ? "Play" : "Sandbox";
+    this.sceneBox.hidden = play;
+    this.failureBox.hidden = play;
+    this.playBox.hidden = !play;
+    this.again.textContent = play ? "Restart all" : "Fly again";
+    this.again.title = play ? "Every bird back at the start point (key R)" : "Same scene and conditions, a new start push and new noise";
+    if (!visible || play) this.setTool(null);
+    if (!play) this.setFollowing(false);
+  }
+
+  /** Play: what is picked (null: nothing), with its height and, for an obstacle, its size. */
+  showSelection(sel: PlaySelection | null): void {
+    this.picked.textContent = !sel ? "Nothing picked." : sel.kind === "target" ? "Picked: the target." : `Picked: obstacle ${sel.index + 1}.`;
+    this.removeButton.disabled = sel?.kind !== "obstacle";
+    this.playHeight.disabled = !sel;
+    if (sel) {
+      this.playHeight.value = String(sel.height);
+      this.playHeightValue.textContent = `${Math.round(100 * sel.height)} cm`;
+      this.playSize.value = String(sel.radius);
+      this.playSizeValue.textContent = `r ${Math.round(100 * sel.radius)} cm`;
+    }
+    this.playSizeRow.style.display = sel?.kind === "obstacle" ? "" : "none";
+  }
+
+  /** Play: the object picked follows the mouse, or no longer does. */
+  setFollowing(on: boolean): void {
+    if (on === this.following) return;
+    this.following = on;
+    this.followButton.classList.toggle("on", on);
+    this.h.play({ kind: "follow", on });
   }
 }

@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hummingbird RL</title>
+    <style>
+      :root {
+        --panel: rgba(255, 255, 255, 0.88);
+        --ink: #1d2733;
+        --muted: #5b6672;
+        --accent: #1d7a4c;
+        --line: #d5dbe1;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        color: var(--ink);
+        /* A deep enough sky for the bird's colours to stand out against it. */
+        background: linear-gradient(#6d8fb3 0%, #b3c7da 55%, #dde4d8 100%);
+      }
+      #view {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      .panel {
+        position: absolute;
+        cursor: grab; /* panels can be dragged by an empty part (double click: back in place) */
+        left: 12px;
+        right: 12px;
+        max-width: 860px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .panel.dragging {
+        cursor: grabbing;
+        user-select: none;
+      }
+      #hud {
+        top: 12px;
+      }
+      #readout {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      #controls {
+        bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        align-items: center;
+      }
+      #controls .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+      }
+      select,
+      button {
+        font: inherit;
+        padding: 3px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: white;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      button.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .seg {
+        display: inline-flex;
+      }
+      .seg button:first-child {
+        border-radius: 6px 0 0 6px;
+      }
+      .seg button:last-child {
+        border-radius: 0 6px 6px 0;
+        border-left: none;
+      }
+      .seg button:not(:first-child):not(:last-child) {
+        border-radius: 0;
+        border-left: none;
+      }
+      /* The sandbox's controls, on the right. */
+      #sandbox {
+        left: auto;
+        right: 12px;
+        top: 150px;
+        width: 290px;
+        max-height: calc(100vh - 180px);
+        overflow-y: auto;
+      }
+      #sandbox .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 2px 0;
+      }
+      #sandbox .section {
+        margin-top: 8px;
+        font-weight: 600;
+      }
+      #sandbox .seg {
+        margin: 2px 0;
+      }
+      #sandbox .slider {
+        display: grid;
+        grid-template-columns: 100px 1fr 54px;
+        align-items: center;
+        gap: 6px;
+      }
+      #sandbox .slider input {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      #sandbox .value {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        text-align: right;
+      }
+      @media (max-width: 1200px) {
+        #sandbox {
+          max-height: calc(100vh - 330px); /* above the controls, which it overlaps on narrow screens */
+        }
+      }
+      .sandbox-notes {
+        margin: 4px 0;
+        color: #b45309;
+      }
+      .sandbox-notes:empty {
+        display: none;
+      }
+      /* The key of the air's colours, next to its menu. */
+      #air-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      #air-key[hidden],
+      #timeline[hidden] {
+        display: none;
+      }
+      #air-key .bar {
+        display: inline-block;
+        width: 64px;
+        height: 9px;
+        border-radius: 3px;
+      }
+      #air-key .bar[hidden] {
+        display: none;
+      }
+      /* Help that stays out of the way: a hint that can be closed, and an (i) per section. */
+      #sandbox .hint {
+        position: relative;
+        margin: 6px 0 2px;
+        padding: 5px 24px 5px 8px;
+        border-radius: 6px;
+        background: rgba(43, 108, 176, 0.08);
+        color: var(--muted);
+      }
+      #sandbox .hint .close {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        padding: 0 6px;
+        border: none;
+        background: none;
+      }
+      #sandbox .info {
+        width: 15px;
+        height: 15px;
+        margin-left: 6px;
+        padding: 0;
+        border-radius: 50%;
+        font: italic 600 10px/13px Georgia, serif;
+        color: var(--muted);
+        cursor: help;
+        vertical-align: 1px;
+      }
+      #sandbox .help {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 2px 0 4px;
+      }
+      /* One row per bird: colour, controller, look, followed, remove. */
+      #sandbox .bird {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        margin: 3px 0;
+      }
+      #sandbox .bird select {
+        flex: 1;
+        min-width: 0;
+      }
+      #sandbox .bird button {
+        padding: 2px 6px;
+      }
+      #sandbox .chip {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+      }
+      #timeline {
+        position: relative;
+        flex: 1;
+        min-width: 140px;
+        display: flex;
+        align-items: center;
+      }
+      #time {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+      /* On the timeline: a red tick when the wing fails, and a hatched band over what the
+         live mode shows after the end of the episode. 8 px is half the slider's thumb. */
+      .mark {
+        position: absolute;
+        top: 50%;
+        width: 3px;
+        height: 16px;
+        margin: -8px 0 0 -1.5px;
+        border-radius: 2px;
+        background: #c2410c;
+        pointer-events: none;
+      }
+      .after-band {
+        position: absolute;
+        top: 50%;
+        right: 8px;
+        height: 10px;
+        margin-top: -5px;
+        border-radius: 2px;
+        background: repeating-linear-gradient(135deg, rgba(55, 65, 81, 0.55) 0 3px, transparent 3px 6px);
+        pointer-events: none;
+      }
+      #clock {
+        font-variant-numeric: tabular-nums;
+        min-width: 92px;
+      }
+      .label {
+        color: var(--muted);
+      }
+      code {
+        font-size: 12px;
+      }
+      #about {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        font-size: 11px;
+        color: white;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        max-width: 230px;
+        text-align: right;
+      }
+      #credits,
+      #legend {
+        display: none;
+        top: auto;
+        bottom: 150px;
+      }
+      #credits.open,
+      #legend.open {
+        display: block;
+      }
+      #legend {
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+      #legend ul {
+        margin: 4px 0 0;
+        padding-left: 18px;
+      }
+      .swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        vertical-align: -1px;
+        margin-right: 4px;
+      }
+      #credits a {
+        color: var(--accent);
+      }
+      @media (max-width: 900px) {
+        #about {
+          display: none;
+        }
+      }
+      /* The HUD and the controls fold to their essentials (a phone screen is small): the
+         fold button sits in the top-right corner, the parts marked "more" disappear. */
+      #hud,
+      #controls {
+        padding-right: 40px;
+      }
+      .fold {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        line-height: 1;
+        font-weight: bold;
+      }
+      .folded .more {
+        display: none !important;
+      }
+      @media (max-width: 600px) {
+        .panel {
+          left: 6px;
+          right: 6px;
+          padding: 6px 36px 6px 8px;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        select,
+        button {
+          padding: 2px 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud" class="panel">
+      <button id="fold-hud" class="fold" title="Fold">−</button>
+      <div id="info">Loading…</div>
+      <div id="readout"></div>
+    </div>
+    <div id="about"></div>
+    <div id="sandbox" class="panel" hidden>
+      <button id="fold-sandbox" class="fold" title="Fold">−</button>
+      <b>Sandbox</b>
+      <div class="sandbox-body more"></div>
+    </div>
+    <div id="legend" class="panel">
+      <b>Four modes</b>
+      <ul>
+        <li><b>Recorded</b>: the test episodes measured in Python, replayed frame by frame. Same seeds, same
+          simulator: each one is one of the episodes behind the results.</li>
+        <li><b>Live</b>: a new random situation at each "New flight", drawn like the training and test ones
+          (conditions menu), flown in your browser by the controller chosen. Changing the controller keeps the
+          situation, to compare them on the same one.</li>
+        <li><b>Sandbox</b>: you build the scene and set the conditions, and up to four controllers fly it
+          together; drag a target or an obstacle already placed to move it (Shift + drag: up and down). Opened
+          from a live flight, it starts from that flight.</li>
+        <li><b>Play</b>: the birds fly without end, in real time, after a target you move: drag it, or an
+          obstacle, while they fly (Shift + drag: up and down; F: the object picked follows the mouse, Shift: up and down). Any controller of
+          any task can fly; a bird that falls starts again from the start point. "The birds see the target" off:
+          they are no longer told where it is (it turns grey), something no controller met in training.</li>
+      </ul>
+      Every panel can be moved: drag it by an empty part; a double click puts it back.<br />
+      <b>What you see</b>
+      <ul>
+        <li><span class="swatch" style="background: #f0a020"></span><b>Orange ball</b>: the target zone, 3 cm in radius.
+          Go-to-point, obstacles and the last navigation waypoint: the bird must stay inside for 0.25 s, slower than
+          10 cm/s ("holding" in the panel). Hover: it must stay within 3 cm on average over the last 2 s.
+          The other navigation waypoints are 4 cm balls, only to be crossed. Faded: already reached.
+          The dashed line gives the target's height.</li>
+        <li><span class="swatch" style="background: #8a7a68"></span><b>Brown spheres</b>: obstacles; touching one ends the flight.</li>
+        <li><b>Trail</b>: the path flown, blue when slow, red at 1 m/s and more; grey after the end of the episode.
+          With several birds (sandbox), each trail has its bird's colour.</li>
+        <li><b>Blue arrow</b> above the bird: the wind (50 cm = a wind as strong as the bird's weight). The wind
+          is the same everywhere in the arena, so with several birds one arrow, above the bird followed, says it for all.</li>
+        <li><b>Orange-red wing</b>: a wing that has lost force (fully coloured at 40%).</li>
+        <li><b>Air</b> (the "air" menu): a simulation of the air around the followed bird, in a 40 cm box that
+          follows it (1 cm cells; another bird inside the box moves its air too). The wings push the air down with
+          exactly the bird's simulated thrust, where each wing is in its stroke, and the wind blows through the box;
+          the air is computed as an incompressible fluid with Jos Stam's "Stable Fluids" method. Best in slow
+          motion (×1/16, Side camera).
+          <b>smoke</b>: smoke released around the bird and by its wings, carried by the air.
+          <b>laser sheet</b>: tracer particles in a thin slice facing you, as in a lab where fog is lit by a laser
+          sheet; each leaves a short streak along its motion, brighter when faster.
+          <b>vortex tubes</b>: the surfaces wrapping the air's vortices (where it spins more than it is sheared),
+          coloured by speed, as simulations of flapping flight show their wakes.
+          <b>speed</b>, <b>pressure</b> (blue below, red above the surrounding air), <b>spin</b>: the smoke
+          coloured by the air it is in; their range is shown next to the menu.
+          The air does not act back on the bird, and 1 cm cells are too coarse for the flow around the feathers:
+          what you see is the jet, its large vortices, the wind bending it, the ground spreading it.</li>
+        <li><b>Grey ring</b> on the ground: the start point. <b>Green disc</b>: the arena, 1.5 m in radius and
+          1.2 m high, with 10 cm squares.</li>
+        <li><b>Timeline</b>: red tick = sudden wing failure; hatched band = after the end of the episode
+          (live and sandbox, after a loss of control: shown, not counted).</li>
+      </ul>
+      <b>Conditions</b> (Live mode menu; the recorded test episodes are in normal conditions, or sudden failure)
+      <ul>
+        <li><b>normal</b>: a light breeze (up to 5% of the bird's weight) with gusts of 2%, and small sensor
+          and actuator noise. What every agent was tested in.</li>
+        <li><b>randomised</b>: wind up to 30% of the weight, gusts up to 10%, a bird 25% lighter to 25% heavier,
+          and in 70% of the flights one wing weakened by up to 40% from the start. The agents marked
+          "randomised" were trained in these conditions.</li>
+        <li><b>sudden wing failure</b>: normal conditions, then one wing loses 40% of its force, at a random
+          moment between 1.5 and 3 s.</li>
+        <li><b>calm air</b>: no wind and no noise at all.</li>
+      </ul>
+      <b>Controllers</b>: PID and LQR are classical controllers designed by hand; the others are neural
+      networks trained by reinforcement learning, named algorithm · how it was trained · training run
+      (e.g. "PPO · randomised · #1"). "Transfer from obstacles": it started from a network trained on the
+      Obstacles task. "Fine-tuned": trained in normal conditions, then in randomised ones ("longer": twice as
+      many extra steps). "Best": the version saved at its best validation score, not the last one. All of them see the same 48 numbers, measured with noise: altitude, speed,
+      tilt and spin, their previous command, the next two targets and the five nearest obstacles. None is told
+      the wind, the bird's mass or a wing's damage.
+    </div>
+    <div id="credits" class="panel">
+      <b>Credits</b><br />
+      3D hummingbird: <a href="https://sketchfab.com/3d-models/animated-hovering-flying-hummingbird-loop-102884713a2742ce829e368d2a790c45" target="_blank" rel="noopener">“Animated Hovering Flying Hummingbird Loop”</a>
+      by LasquetiSpice, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.
+      Changes: textures resized and converted to WebP, unused animation and keyframes removed, rendered with our own shader; its wingbeat is replayed at the simulated frequency.<br />
+      Wing motion of the drawn bird: Song, Tobalske, Powers, Hedrick &amp; Luo (2016), <i>R. Soc. Open Sci.</i> 3:160230, data
+      <a href="https://doi.org/10.5061/dryad.8ch1b" target="_blank" rel="noopener">doi:10.5061/dryad.8ch1b</a>.<br />
+      Rendering: <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>.
+    </div>
+    <div id="controls" class="panel">
+      <button id="fold-controls" class="fold" title="Fold">−</button>
+      <div class="row more">
+        <span class="seg">
+          <button id="mode-recorded" class="on" title="Test episodes recorded in Python">Recorded</button>
+          <button id="mode-live" title="New flights simulated in your browser">Live</button>
+          <button id="mode-sandbox" title="Build the situation yourself">Sandbox</button>
+          <button id="mode-play" title="Move the target and the obstacles while the birds fly">Play</button>
+        </span>
+        <select id="task" aria-label="Task"></select>
+        <select id="policy" aria-label="Controller"></select>
+        <select id="episode" aria-label="Episode"></select>
+        <select id="regime" aria-label="Conditions" hidden>
+          <option value="normal" title="Light breeze, small sensor and actuator noise">normal conditions</option>
+          <option value="randomised" title="Wind up to 30% of the weight, mass ±25%, a weakened wing">randomised conditions</option>
+          <option value="failure" title="One wing suddenly loses 40% of its force">sudden wing failure</option>
+          <option value="calm" title="No wind, no noise">calm air</option>
+        </select>
+        <button id="new-flight" title="A new random situation (key N)" hidden>New flight</button>
+      </div>
+      <div class="row">
+        <button id="play">Pause</button>
+        <button id="restart">Restart</button>
+        <span id="timeline">
+          <input id="time" type="range" min="0" max="1" step="0.0167" value="0" aria-label="Time" />
+          <span id="mark-failure" class="mark" title="Sudden wing failure" hidden></span>
+          <span id="after-band" class="after-band" hidden></span>
+        </span>
+        <span id="clock" class="label">0.00 / 0.00 s</span>
+        <span class="label more">speed</span>
+        <span id="speeds" class="row more" style="width: auto"></span>
+      </div>
+      <div class="row more">
+        <span class="label">camera</span>
+        <button data-camera="follow">Follow</button>
+        <button data-camera="side">Side</button>
+        <button data-camera="top">Top</button>
+        <button data-camera="behind">Behind</button>
+        <button data-camera="eye" title="What the bird sees, horizon kept level">Bird's eye</button>
+        <button data-camera="overview">Overview</button>
+        <button id="scale">Bird ×1</button>
+        <button id="model" disabled>Drawn bird</button>
+        <label class="label"><input id="wind" type="checkbox" checked /> wind</label>
+        <label class="label" title="The path flown by each bird"><input id="trails" type="checkbox" checked /> path</label>
+        <label class="label" title="A smoke simulation of the air around the followed bird (see the Legend)">air
+          <select id="air" aria-label="Air">
+            <option value="off">off</option>
+            <option value="smoke">smoke</option>
+            <option value="sheet">laser sheet</option>
+            <option value="tubes">vortex tubes</option>
+            <option value="speed">speed</option>
+            <option value="pressure">pressure</option>
+            <option value="spin">spin</option>
+          </select></label>
+        <label id="air-box-label" class="label" title="The edges of the 40 cm box of air simulated around the followed bird" hidden><input id="air-box" type="checkbox" /> box</label>
+        <span id="air-key" class="label" hidden><span class="lo"></span><span class="bar"></span><span class="hi"></span></span>
+        <button id="legend-button">Legend</button>
+        <button id="credits-button">Credits</button>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

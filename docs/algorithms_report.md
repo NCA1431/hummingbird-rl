@@ -27,8 +27,9 @@ shared and what I learned.*
 **Key findings.**
 
 * *Classical control is hard to beat in calm air.* PID and LQR succeed in 100% of the hover and
-  go-to-point tests, and the PID, thanks to its integrators, is the most robust controller to wind and
-  wing damage (robust area 0.82).
+  go-to-point tests. Under wind and wing damage, the PID, thanks to its integrators, stays the most
+  robust controller on hover (robust area 0.82); on go-to-point, only agents trained in randomised
+  conditions beat it (PPO 0.96 against 0.81).
 * *Learning pays off where the classical controllers must plan.* Around obstacles SAC succeeds in 98% and
   PPO in 89% of the episodes, against 44 to 52% for the potential-field controllers. On the long
   navigation course, though, the cautious PID stays best (41%, against 18% for PPO and 27% with transfer).
