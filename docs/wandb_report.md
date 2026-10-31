@@ -12,6 +12,7 @@ follow a course.
 **Links:** [interactive demo](https://nca1431.github.io/hummingbird-rl/) (the bird flies live in your
 browser, with every controller of this report) · [code on GitHub](https://github.com/NCA1431/hummingbird-rl)
 · [the algorithms explained (PDF)](https://github.com/NCA1431/hummingbird-rl/blob/main/docs/algorithms_report.pdf)
+· [every training and evaluation run (this W&B project)](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl)
 
 *I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
 on my own computer, and interpreted the results. I used Claude (Anthropic) as a tool to write most of the
