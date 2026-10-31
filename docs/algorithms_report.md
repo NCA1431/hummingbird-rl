@@ -26,6 +26,7 @@ shared and what I learned.*
 
 **Links:** [the results (W&B report)](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA?accessToken=h2e4qqobbmpxc77olo6oerm8qkunm18kvwx8p4e3y7qiex25mo2ft7a6utenkng1) · [interactive demo](https://nca1431.github.io/hummingbird-rl/)
 (the bird flies live in your browser, with every controller) · [code on GitHub](https://github.com/NCA1431/hummingbird-rl)
+· [every training and evaluation run (W&B project)](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl)
 
 **Key findings.**
 

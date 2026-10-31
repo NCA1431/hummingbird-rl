@@ -13,7 +13,8 @@ follow a course.
 
 **[Interactive demo](https://nca1431.github.io/hummingbird-rl/)** (every controller flies live in your
 browser) · **[W&B report](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA?accessToken=h2e4qqobbmpxc77olo6oerm8qkunm18kvwx8p4e3y7qiex25mo2ft7a6utenkng1)** (the results, with interactive charts) ·
-**[The algorithms explained (PDF)](docs/algorithms_report.pdf)** (from PID and LQR to PPO, TD3 and SAC)
+**[The algorithms explained (PDF)](docs/algorithms_report.pdf)** (from PID and LQR to PPO, TD3 and SAC) ·
+**[W&B project](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl)** (every training and evaluation run)
 
 *I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
 on my own computer, and interpreted the results. I used Claude (Anthropic) as a tool to write most of the
