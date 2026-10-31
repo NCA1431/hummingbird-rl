@@ -17,14 +17,14 @@ optimisation (PPO), twin delayed deep deterministic policy gradient (TD3) and so
 report explains the algorithms: for each part, its equation, the line of the single-file CleanRL
 implementation that computes it, the Stable-Baselines3 (SB3) setting that controls it, and, where we ran
 one, the ablation that shows what it does on our bird. The full experimental results are in the [W&B
-report](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA); here they serve as evidence for how the algorithms work.
+report](https://api.wandb.ai/links/nca1431-centralesup-lec/bsasld1w); here they serve as evidence for how the algorithms work.
 
 *I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
 on my own computer, and interpreted the results. I used Claude (Anthropic) as a tool to write most of the
 code and to draft the text, which I reviewed and corrected. The end of the report says how the work was
 shared and what I learned.*
 
-**Links:** [the results (W&B report)](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA) · [interactive demo](https://nca1431.github.io/hummingbird-rl/)
+**Links:** [the results (W&B report)](https://api.wandb.ai/links/nca1431-centralesup-lec/bsasld1w) · [interactive demo](https://nca1431.github.io/hummingbird-rl/)
 (the bird flies live in your browser, with every controller) · [code on GitHub](https://github.com/NCA1431/hummingbird-rl)
 
 **Key findings.**

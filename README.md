@@ -12,7 +12,7 @@ follow a course.
 </p>
 
 **[Interactive demo](https://nca1431.github.io/hummingbird-rl/)** (every controller flies live in your
-browser) · **[W&B report](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA)** (the results, with interactive charts) ·
+browser) · **[W&B report](https://api.wandb.ai/links/nca1431-centralesup-lec/bsasld1w)** (the results, with interactive charts) ·
 **[The algorithms explained (PDF)](docs/algorithms_report.pdf)** (from PID and LQR to PPO, TD3 and SAC)
 
 *I chose this problem, defined the tasks and the experiments, ran all 124 training runs and the evaluations
@@ -153,7 +153,7 @@ checked from the outside: what each part takes in, what it returns and why.
 This is my second version of the project. During the summer holidays I spent three weeks on a first
 hummingbird simulation, also built with AI assistance, set in a much more complex world and with a large
 part written in C++. It grew too large to finish, so I started again, smaller, in Python, with classical
-baselines from the start. The end of the [W&B report](https://forge.coreweave.com/wandb/nca1431-centralesup-lec/hummingbird-rl/reports/Teaching-a-simulated-hummingbird-to-fly-deep-RL-against-classical-control--VmlldzoxODE3NDkwOA) says more about that first attempt,
+baselines from the start. The end of the [W&B report](https://api.wandb.ai/links/nca1431-centralesup-lec/bsasld1w) says more about that first attempt,
 what I learned and what I would do differently.
 
 ## Credits
